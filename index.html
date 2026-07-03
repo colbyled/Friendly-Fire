@@ -426,6 +426,7 @@
         conn = c;
         wireConnection();
       });
+      wireSignalingRecovery(peer);
       enterSetup();
     });
     p.on('error', (err) => {
@@ -436,6 +437,20 @@
         setLandingStatus('Connection error: ' + err.type);
         $('hostBtn').disabled = false;
       }
+    });
+  }
+
+  // PeerJS can silently lose its connection to the signaling server (laptop sleep,
+  // brief network drop, tab backgrounded a long time) while the tab stays open and
+  // looks fine. When that happens the room code stops working with no visible error.
+  // Auto-reconnect keeps the same peer ID alive instead of requiring a fresh code.
+  function wireSignalingRecovery(p) {
+    p.on('disconnected', () => {
+      setStatus(false, 'Reconnecting…');
+      setTimeout(() => { if (!p.destroyed) p.reconnect(); }, 1000);
+    });
+    p.on('close', () => {
+      setStatus(false, 'Connection lost — refresh to start a new room');
     });
   }
 
@@ -461,6 +476,7 @@
     const p = new Peer();
     p.on('open', () => {
       peer = p;
+      wireSignalingRecovery(peer);
       conn = peer.connect(PREFIX + code, { reliable: true });
       conn.on('open', () => wireConnection());
       conn.on('error', () => {
