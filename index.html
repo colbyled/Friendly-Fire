@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Friendly Fire</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1220;
+    --panel: #241a2e;
+    --panel-2: #2d2138;
+    --accent: #ff5e3a;
+    --accent-2: #ff9e2c;
+    --text: #f3ecf7;
+    --muted: #a390b0;
+    --yes: #3ac97e;
+    --no: #ff5e5e;
+    --maybe: #ffcf4d;
+    --notsure: #8a8fa8;
+    --border: #3a2c48;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 20% 0%, #2a1c33 0%, var(--bg) 55%);
+    color: var(--text);
+  }
+  #app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ---------- Landing ---------- */
+  #landing {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+  }
+  .logo {
+    font-size: 48px; font-weight: 800; letter-spacing: -1px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin-bottom: 4px;
+  }
+  .tagline { color: var(--muted); margin-bottom: 32px; font-size: 14px; }
+  .card-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 28px; width: 340px; max-width: 90vw;
+  }
+  .card-box h2 { margin: 0 0 4px; font-size: 18px; }
+  .card-box p { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .btn {
+    display: inline-block; border: none; border-radius: 10px; padding: 12px 20px;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: transform .1s, opacity .15s;
+    color: white;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 100%; }
+  .btn-secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); width: 100%; }
+  .btn-small { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
+  .divider { display: flex; align-items: center; color: var(--muted); font-size: 12px; margin: 18px 0; gap: 10px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  input[type=text] {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 16px; letter-spacing: 2px;
+    text-transform: uppercase; text-align: center; margin-bottom: 10px;
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent); }
+  #landingStatus { margin-top: 16px; font-size: 13px; color: var(--muted); min-height: 18px; }
+  #hostCodeBox { display: none; margin-top: 18px; }
+  #hostCodeBox .code { font-size: 34px; font-weight: 800; letter-spacing: 6px; color: var(--accent-2); margin: 6px 0; }
+  #joinFields { display: none; }
+
+  /* ---------- Game screen ---------- */
+  #game { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
+    flex-wrap: wrap; gap: 8px;
+  }
+  header .brand { font-weight: 800; font-size: 18px; }
+  header .brand span { color: var(--accent-2); }
+  #statusPill {
+    font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--panel-2);
+    border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;
+  }
+  #statusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--no); }
+  #statusPill.connected #statusDot { background: var(--yes); }
+  #roomCodeDisplay { font-size: 12px; color: var(--muted); }
+  #roomCodeDisplay b { color: var(--text); letter-spacing: 2px; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #board-pane { flex: 1; padding: 18px 20px; overflow-y: auto; }
+  #board-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  #board-toolbar h3 { margin: 0; font-size: 15px; color: var(--muted); font-weight: 600; }
+  #boardGrid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px;
+  }
+  .card {
+    position: relative; aspect-ratio: 3/4; perspective: 800px; cursor: pointer;
+  }
+  .card .flipper {
+    width: 100%; height: 100%; position: relative; transition: transform .5s;
+    transform-style: preserve-3d;
+  }
+  .card.flipped .flipper { transform: rotateY(180deg); }
+  .card .face {
+    position: absolute; inset: 0; backface-visibility: hidden; border-radius: 12px;
+    overflow: hidden; border: 2px solid var(--border); background: var(--panel-2);
+    display: flex; flex-direction: column;
+  }
+  .card .face.front img { width: 100%; height: 100%; object-fit: cover; flex: 1; }
+  .card .face.front .name {
+    padding: 5px 6px; font-size: 12px; text-align: center; background: rgba(0,0,0,.35);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card .face.back {
+    transform: rotateY(180deg); align-items: center; justify-content: center;
+    background: repeating-linear-gradient(45deg, #35263f, #35263f 10px, #3d2c49 10px, #3d2c49 20px);
+  }
+  .card .face.back::after { content: "✕"; font-size: 34px; color: var(--accent); font-weight: 800; }
+  .card .remove-btn {
+    position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--no); color: white; border: none; font-size: 12px; line-height: 22px;
+    text-align: center; cursor: pointer; opacity: 0; transition: opacity .15s; z-index: 2;
+  }
+  .card:hover .remove-btn { opacity: 1; }
+  #emptyBoard { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
+
+  #addPhotoBtn { cursor: pointer; }
+  #fileInput { display: none; }
+
+  #qa-pane {
+    width: 340px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  #qa-pane h3 { margin: 0; padding: 16px 18px 10px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  #qaList { flex: 1; overflow-y: auto; padding: 0 14px; display: flex; flex-direction: column; gap: 10px; }
+  .qbubble {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
+  }
+  .qbubble .who { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .qbubble.mine { border-color: rgba(255,94,58,.4); }
+  .qbubble .text { font-size: 14px; line-height: 1.35; }
+  .qbubble .answers { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .abtn {
+    flex: 1; min-width: 62px; border: none; border-radius: 8px; padding: 7px 4px; font-size: 12px;
+    font-weight: 700; cursor: pointer; color: #1a1220;
+  }
+  .abtn.yes { background: var(--yes); }
+  .abtn.no { background: var(--no); color: white; }
+  .abtn.maybe { background: var(--maybe); }
+  .abtn.notsure { background: var(--notsure); color: white; }
+  .answer-badge {
+    display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+  }
+  .answer-badge.yes { background: var(--yes); color: #1a1220; }
+  .answer-badge.no { background: var(--no); color: white; }
+  .answer-badge.maybe { background: var(--maybe); color: #1a1220; }
+  .answer-badge.notsure { background: var(--notsure); color: white; }
+  .waiting { font-size: 12px; color: var(--muted); margin-top: 6px; font-style: italic; }
+
+  #qaForm { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
+  #qaInput {
+    flex: 1; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 14px; text-transform: none;
+    letter-spacing: normal; text-align: left; margin: 0;
+  }
+  #qaForm button {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; color: white;
+    border-radius: 10px; padding: 0 16px; font-weight: 700; cursor: pointer;
+  }
+
+  @media (max-width: 720px) {
+    main { flex-direction: column; }
+    #qa-pane { width: auto; border-left: none; border-top: 1px solid var(--border); max-height: 42vh; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- LANDING -->
+  <div id="landing">
+    <div class="logo">🔥 Friendly Fire</div>
+    <div class="tagline">A guess-who duel you can play from anywhere</div>
+
+    <div class="card-box">
+      <h2>Host a game</h2>
+      <p>Get a room code and share it with the other player.</p>
+      <button class="btn btn-primary" id="hostBtn">Host New Game</button>
+      <div id="hostCodeBox">
+        <p style="margin-bottom:0;">Your room code — send this to the other player:</p>
+        <div class="code" id="hostCodeText">----</div>
+        <button class="btn btn-small btn-secondary" id="copyCodeBtn">Copy code</button>
+      </div>
+
+      <div class="divider">OR</div>
+
+      <h2>Join a game</h2>
+      <p>Enter the code the host sent you.</p>
+      <div id="joinFields">
+        <input type="text" id="joinCodeInput" maxlength="4" placeholder="CODE">
+      </div>
+      <button class="btn btn-secondary" id="joinBtn">Join Game</button>
+
+      <div id="landingStatus"></div>
+    </div>
+  </div>
+
+  <!-- GAME -->
+  <div id="game">
+    <header>
+      <div class="brand">🔥 Friendly <span>Fire</span></div>
+      <div id="roomCodeDisplay">Room <b id="roomCodeText"></b></div>
+      <div id="statusPill"><span id="statusDot"></span><span id="statusText">Connecting…</span></div>
+    </header>
+    <main>
+      <div id="board-pane">
+        <div id="board-toolbar">
+          <h3>Photo Board — click a card to flip it down</h3>
+          <div>
+            <button class="btn btn-small btn-primary" id="addPhotoBtn">+ Add Photos</button>
+            <input type="file" id="fileInput" accept="image/*" multiple>
+          </div>
+        </div>
+        <div id="boardGrid"></div>
+        <div id="emptyBoard">No photos yet — click "+ Add Photos" to build the board.</div>
+      </div>
+      <div id="qa-pane">
+        <h3>Questions</h3>
+        <div id="qaList"></div>
+        <form id="qaForm">
+          <input type="text" id="qaInput" placeholder="Ask a question…" autocomplete="off">
+          <button type="submit">Send</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const PREFIX = 'ff-room-';
+  const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+  const $ = (id) => document.getElementById(id);
+
+  let peer = null;
+  let conn = null;
+  let myRole = null; // 'host' | 'joiner'
+  let roomCode = null;
+  let photos = [];   // {id, name, dataUrl, flipped}
+  let questions = []; // {id, text, mine, answer}
+
+  function randomCode() {
+    let s = '';
+    for (let i = 0; i < 4; i++) s += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+    return s;
+  }
+  function uid() {
+    return 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+  function setLandingStatus(msg) { $('landingStatus').textContent = msg || ''; }
+
+  // ---------- Hosting ----------
+  $('hostBtn').addEventListener('click', () => {
+    $('joinFields').style.display = 'none';
+    $('hostBtn').disabled = true;
+    myRole = 'host';
+    attemptHost(0);
+  });
+
+  function attemptHost(tries) {
+    if (tries > 5) { setLandingStatus('Could not create a room. Please try again.'); $('hostBtn').disabled = false; return; }
+    const code = randomCode();
+    setLandingStatus('Creating room…');
+    const p = new Peer(PREFIX + code);
+    p.on('open', () => {
+      peer = p;
+      roomCode = code;
+      $('hostCodeText').textContent = code;
+      $('hostCodeBox').style.display = 'block';
+      setLandingStatus('Waiting for the other player to join…');
+      peer.on('connection', (c) => {
+        conn = c;
+        wireConnection();
+      });
+    });
+    p.on('error', (err) => {
+      if (err.type === 'unavailable-id') {
+        p.destroy();
+        attemptHost(tries + 1);
+      } else {
+        setLandingStatus('Connection error: ' + err.type);
+        $('hostBtn').disabled = false;
+      }
+    });
+  }
+
+  $('copyCodeBtn').addEventListener('click', () => {
+    navigator.clipboard && navigator.clipboard.writeText(roomCode);
+    $('copyCodeBtn').textContent = 'Copied!';
+    setTimeout(() => $('copyCodeBtn').textContent = 'Copy code', 1200);
+  });
+
+  // ---------- Joining ----------
+  $('joinBtn').addEventListener('click', () => {
+    if ($('joinFields').style.display !== 'block') {
+      $('joinFields').style.display = 'block';
+      $('hostCodeBox').style.display = 'none';
+      $('joinCodeInput').focus();
+      return;
+    }
+    const code = $('joinCodeInput').value.trim().toUpperCase();
+    if (code.length !== 4) { setLandingStatus('Enter the 4-character room code.'); return; }
+    myRole = 'joiner';
+    roomCode = code;
+    $('joinBtn').disabled = true;
+    setLandingStatus('Connecting…');
+    const p = new Peer();
+    p.on('open', () => {
+      peer = p;
+      conn = peer.connect(PREFIX + code, { reliable: true });
+      conn.on('open', () => wireConnection());
+      conn.on('error', () => {
+        setLandingStatus('Could not find that room. Check the code and try again.');
+        $('joinBtn').disabled = false;
+      });
+    });
+    p.on('error', (err) => {
+      setLandingStatus('Connection error: ' + err.type);
+      $('joinBtn').disabled = false;
+    });
+  });
+
+  $('joinCodeInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('joinBtn').click();
+  });
+
+  // ---------- Shared connection wiring ----------
+  function wireConnection() {
+    conn.on('open', enterGame);
+    if (conn.open) enterGame();
+    conn.on('data', handleData);
+    conn.on('close', () => setStatus(false, 'Player disconnected'));
+    conn.on('error', () => setStatus(false, 'Connection error'));
+  }
+
+  function enterGame() {
+    $('landing').style.display = 'none';
+    $('game').style.display = 'flex';
+    $('roomCodeText').textContent = roomCode;
+    setStatus(true, 'Connected');
+    renderBoard();
+    renderQuestions();
+  }
+
+  function setStatus(connected, text) {
+    $('statusPill').classList.toggle('connected', connected);
+    $('statusText').textContent = text;
+  }
+
+  function send(obj) {
+    if (conn && conn.open) conn.send(obj);
+  }
+
+  function handleData(msg) {
+    if (!msg || !msg.type) return;
+    if (msg.type === 'photo') {
+      photos.push({ id: msg.id, name: msg.name, dataUrl: msg.dataUrl, flipped: false });
+      renderBoard();
+    } else if (msg.type === 'delete-photo') {
+      photos = photos.filter(p => p.id !== msg.id);
+      renderBoard();
+    } else if (msg.type === 'question') {
+      questions.push({ id: msg.id, text: msg.text, mine: false, answer: null });
+      renderQuestions();
+    } else if (msg.type === 'answer') {
+      const q = questions.find(q => q.id === msg.id);
+      if (q) { q.answer = msg.answer; renderQuestions(); }
+    }
+  }
+
+  // ---------- Photo board ----------
+  $('addPhotoBtn').addEventListener('click', () => $('fileInput').click());
+  $('fileInput').addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      const dataUrl = await resizeImage(file, 480);
+      let name = file.name.replace(/\.[^/.]+$/, '');
+      name = prompt('Name for this photo?', name) || name;
+      const id = uid();
+      photos.push({ id, name, dataUrl, flipped: false });
+      send({ type: 'photo', id, name, dataUrl });
+    }
+    renderBoard();
+    e.target.value = '';
+  });
+
+  function resizeImage(file, maxDim) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > height && width > maxDim) { height *= maxDim / width; width = maxDim; }
+          else if (height > maxDim) { width *= maxDim / height; height = maxDim; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.75));
+        };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderBoard() {
+    const grid = $('boardGrid');
+    grid.innerHTML = '';
+    $('emptyBoard').style.display = photos.length ? 'none' : 'block';
+    photos.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'card' + (p.flipped ? ' flipped' : '');
+      card.innerHTML = `
+        <button class="remove-btn" title="Remove photo">✕</button>
+        <div class="flipper">
+          <div class="face front">
+            <img src="${p.dataUrl}" alt="">
+            <div class="name">${escapeHtml(p.name)}</div>
+          </div>
+          <div class="face back"></div>
+        </div>`;
+      card.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-btn')) return;
+        p.flipped = !p.flipped;
+        card.classList.toggle('flipped', p.flipped);
+      });
+      card.querySelector('.remove-btn').addEventListener('click', () => {
+        photos = photos.filter(x => x.id !== p.id);
+        send({ type: 'delete-photo', id: p.id });
+        renderBoard();
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  // ---------- Questions ----------
+  $('qaForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = $('qaInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const id = uid();
+    questions.push({ id, text, mine: true, answer: null });
+    send({ type: 'question', id, text });
+    input.value = '';
+    renderQuestions();
+  });
+
+  function answerQuestion(id, answer) {
+    const q = questions.find(q => q.id === id);
+    if (!q) return;
+    q.answer = answer;
+    send({ type: 'answer', id, answer });
+    renderQuestions();
+  }
+
+  const ANSWER_LABELS = { yes: 'Yes', no: 'No', maybe: 'Maybe', notsure: 'Not Sure' };
+
+  function renderQuestions() {
+    const list = $('qaList');
+    list.innerHTML = '';
+    questions.forEach(q => {
+      const div = document.createElement('div');
+      div.className = 'qbubble' + (q.mine ? ' mine' : '');
+      let inner = `<div class="who">${q.mine ? 'You asked' : 'They asked'}</div><div class="text">${escapeHtml(q.text)}</div>`;
+      if (q.answer) {
+        inner += `<div class="answer-badge ${q.answer}">${ANSWER_LABELS[q.answer]}</div>`;
+      } else if (q.mine) {
+        inner += `<div class="waiting">Waiting for answer…</div>`;
+      } else {
+        inner += `<div class="answers">
+          <button class="abtn yes" data-a="yes">Yes</button>
+          <button class="abtn no" data-a="no">No</button>
+          <button class="abtn maybe" data-a="maybe">Maybe</button>
+          <button class="abtn notsure" data-a="notsure">Not Sure</button>
+        </div>`;
+      }
+      div.innerHTML = inner;
+      if (!q.answer && !q.mine) {
+        div.querySelectorAll('.abtn').forEach(btn => {
+          btn.addEventListener('click', () => answerQuestion(q.id, btn.dataset.a));
+        });
+      }
+      list.appendChild(div);
+    });
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+})();
+</script>
+</body>
+</html>
