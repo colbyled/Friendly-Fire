@@ -66,8 +66,6 @@
   }
   input[type=text]:focus { outline: 2px solid var(--accent); }
   #landingStatus { margin-top: 16px; font-size: 13px; color: var(--muted); min-height: 18px; }
-  #hostCodeBox { display: none; margin-top: 18px; }
-  #hostCodeBox .code { font-size: 34px; font-weight: 800; letter-spacing: 6px; color: var(--accent-2); margin: 6px 0; }
   #joinFields { display: none; }
 
   /* ---------- Shared chrome ---------- */
@@ -88,8 +86,8 @@
   #turnPill { display: none; font-weight: 700; }
   #turnPill.my-turn { background: rgba(58,201,126,.18); border-color: var(--yes); color: var(--yes); }
   #turnPill.their-turn { color: var(--muted); }
-  #roomCodeDisplay { font-size: 12px; color: var(--muted); }
-  #roomCodeDisplay b { color: var(--text); letter-spacing: 2px; }
+  #roomCodeDisplay { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  #roomCodeDisplay b { color: var(--text); letter-spacing: 2px; font-size: 14px; }
 
   .screen { flex: 1; display: none; flex-direction: column; min-height: 0; }
   .screen.active { display: flex; }
@@ -267,11 +265,6 @@
       <h2>Host a game</h2>
       <p>Get a room code and share it with the other player.</p>
       <button class="btn btn-primary" id="hostBtn">Host New Game</button>
-      <div id="hostCodeBox">
-        <p style="margin-bottom:0;">Your room code — send this to the other player:</p>
-        <div class="code" id="hostCodeText">----</div>
-        <button class="btn btn-small btn-secondary" id="copyCodeBtn">Copy code</button>
-      </div>
 
       <div class="divider">OR</div>
 
@@ -289,7 +282,7 @@
   <!-- SHARED HEADER (all non-landing screens) -->
   <header id="mainHeader" style="display:none">
     <div class="brand">🔥 Friendly <span>Fire</span></div>
-    <div id="roomCodeDisplay">Room <b id="roomCodeText"></b></div>
+    <div id="roomCodeDisplay">Room <b id="roomCodeText"></b> <button class="btn btn-small btn-secondary" id="copyCodeBtn2">Copy</button></div>
     <div class="header-right">
       <div id="turnPill"><span id="turnText"></span></div>
       <div id="statusPill"><span id="statusDot"></span><span id="statusText">Connecting…</span></div>
@@ -429,13 +422,11 @@
     p.on('open', () => {
       peer = p;
       roomCode = code;
-      $('hostCodeText').textContent = code;
-      $('hostCodeBox').style.display = 'block';
-      setLandingStatus('Waiting for the other player to join…');
       peer.on('connection', (c) => {
         conn = c;
         wireConnection();
       });
+      enterSetup();
     });
     p.on('error', (err) => {
       if (err.type === 'unavailable-id') {
@@ -448,17 +439,16 @@
     });
   }
 
-  $('copyCodeBtn').addEventListener('click', () => {
+  $('copyCodeBtn2').addEventListener('click', () => {
     navigator.clipboard && navigator.clipboard.writeText(roomCode);
-    $('copyCodeBtn').textContent = 'Copied!';
-    setTimeout(() => $('copyCodeBtn').textContent = 'Copy code', 1200);
+    $('copyCodeBtn2').textContent = 'Copied!';
+    setTimeout(() => $('copyCodeBtn2').textContent = 'Copy', 1200);
   });
 
   // ---------- Joining ----------
   $('joinBtn').addEventListener('click', () => {
     if ($('joinFields').style.display !== 'block') {
       $('joinFields').style.display = 'block';
-      $('hostCodeBox').style.display = 'none';
       $('joinCodeInput').focus();
       return;
     }
@@ -490,20 +480,35 @@
 
   // ---------- Shared connection wiring ----------
   function wireConnection() {
-    conn.on('open', enterSetup);
-    if (conn.open) enterSetup();
+    conn.on('open', onConnOpen);
+    if (conn.open) onConnOpen();
     conn.on('data', handleData);
     conn.on('close', () => setStatus(false, 'Player disconnected'));
     conn.on('error', () => setStatus(false, 'Connection error'));
+  }
+
+  function onConnOpen() {
+    if (myRole === 'joiner') {
+      enterSetup();
+    } else {
+      updateConnectionStatus();
+      send({ type: 'sync-photos', photos: photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl })) });
+      renderSetup();
+    }
   }
 
   function enterSetup() {
     $('landing').style.display = 'none';
     $('mainHeader').style.display = 'flex';
     $('roomCodeText').textContent = roomCode;
-    setStatus(true, 'Connected');
+    updateConnectionStatus();
     showScreen('setupScreen');
     renderSetup();
+  }
+
+  function updateConnectionStatus() {
+    if (conn && conn.open) setStatus(true, 'Connected');
+    else setStatus(false, myRole === 'host' ? 'Waiting for player to join…' : 'Connecting…');
   }
 
   function showScreen(id) {
@@ -525,6 +530,10 @@
     switch (msg.type) {
       case 'photo':
         photos.push({ id: msg.id, name: msg.name, dataUrl: msg.dataUrl, flipped: false });
+        renderSetup();
+        break;
+      case 'sync-photos':
+        photos = msg.photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl, flipped: false }));
         renderSetup();
         break;
       case 'delete-photo':
@@ -697,14 +706,20 @@
     $('hostToolbar').style.display = isHost && !boardStarted ? 'flex' : 'none';
     $('setupTitle').textContent = isHost ? 'Photo Board — build your roster' : 'Photo Board';
 
+    const connected = !!(conn && conn.open);
     if (isHost) {
-      $('setupHint').textContent = boardStarted
-        ? 'Board locked — waiting for the other player to accept…'
-        : 'Add at least 2 photos, then start the game when ready.';
+      if (boardStarted) {
+        $('setupHint').textContent = 'Board locked — waiting for the other player to accept…';
+      } else if (!connected) {
+        $('setupHint').textContent = 'Add your photos now — share the room code above whenever you\'re ready for the other player to join.';
+      } else {
+        $('setupHint').textContent = 'Add at least 2 photos, then start the game when ready.';
+      }
       $('startGameBtn').style.display = boardStarted ? 'none' : 'inline-block';
-      $('startGameBtn').disabled = !(conn && conn.open) || photos.length < 2;
+      $('startGameBtn').disabled = !connected || photos.length < 2;
       $('acceptBtn').style.display = 'none';
-      $('setupFooterMsg').textContent = boardStarted ? 'Waiting for the other player to accept the board…' : '';
+      $('setupFooterMsg').textContent = boardStarted ? 'Waiting for the other player to accept the board…'
+        : (!connected ? 'Waiting for the other player to join…' : '');
     } else {
       $('setupHint').textContent = boardStarted
         ? 'The host finished choosing photos — review the board below.'
