@@ -53,9 +53,10 @@
     color: white;
   }
   .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
   .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 100%; }
   .btn-secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); width: 100%; }
-  .btn-small { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
+  .btn-small { padding: 6px 12px; font-size: 13px; border-radius: 8px; width: auto; }
   .divider { display: flex; align-items: center; color: var(--muted); font-size: 12px; margin: 18px 0; gap: 10px; }
   .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
   input[type=text] {
@@ -69,8 +70,7 @@
   #hostCodeBox .code { font-size: 34px; font-weight: 800; letter-spacing: 6px; color: var(--accent-2); margin: 6px 0; }
   #joinFields { display: none; }
 
-  /* ---------- Game screen ---------- */
-  #game { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  /* ---------- Shared chrome ---------- */
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
@@ -78,22 +78,40 @@
   }
   header .brand { font-weight: 800; font-size: 18px; }
   header .brand span { color: var(--accent-2); }
-  #statusPill {
+  header .header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #statusPill, #turnPill {
     font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--panel-2);
     border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;
   }
   #statusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--no); }
   #statusPill.connected #statusDot { background: var(--yes); }
+  #turnPill { display: none; font-weight: 700; }
+  #turnPill.my-turn { background: rgba(58,201,126,.18); border-color: var(--yes); color: var(--yes); }
+  #turnPill.their-turn { color: var(--muted); }
   #roomCodeDisplay { font-size: 12px; color: var(--muted); }
   #roomCodeDisplay b { color: var(--text); letter-spacing: 2px; }
 
+  .screen { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  .screen.active { display: flex; }
+
   main { flex: 1; display: flex; min-height: 0; }
-  #board-pane { flex: 1; padding: 18px 20px; overflow-y: auto; }
-  #board-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  #board-toolbar h3 { margin: 0; font-size: 15px; color: var(--muted); font-weight: 600; }
-  #boardGrid {
+  .board-pane { flex: 1; padding: 18px 20px; overflow-y: auto; }
+  .board-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
+  .board-toolbar h3 { margin: 0; font-size: 15px; color: var(--muted); font-weight: 600; }
+  .toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gen-row { display: flex; gap: 6px; align-items: center; }
+  .gen-row input[type=text] {
+    width: 150px; padding: 8px 10px; font-size: 13px; letter-spacing: normal; text-transform: none;
+    text-align: left; margin: 0;
+  }
+  .hint-text { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+  .board-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px;
   }
+  .board-grid.guessing .card { cursor: crosshair; }
+  .board-grid.guessing .card .face.front { outline: 2px dashed var(--accent); outline-offset: -2px; }
+  .board-grid.readonly .card { cursor: default; }
   .card {
     position: relative; aspect-ratio: 3/4; perspective: 800px; cursor: pointer;
   }
@@ -123,16 +141,29 @@
     text-align: center; cursor: pointer; opacity: 0; transition: opacity .15s; z-index: 2;
   }
   .card:hover .remove-btn { opacity: 1; }
-  #emptyBoard { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
+  .card.selectable { cursor: pointer; }
+  .card.selected .face.front { outline: 3px solid var(--accent-2); outline-offset: -3px; }
+  .card.selected::before {
+    content: "★"; position: absolute; top: -8px; left: -8px; width: 24px; height: 24px; z-index: 2;
+    background: var(--accent-2); color: #1a1220; border-radius: 50%; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; font-weight: 800;
+  }
+  .empty-note { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
 
-  #addPhotoBtn { cursor: pointer; }
-  #fileInput { display: none; }
+  #fileInput, #genFileInput { display: none; }
 
-  #qa-pane {
+  .qa-pane {
     width: 340px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--panel);
     display: flex; flex-direction: column; min-height: 0;
   }
-  #qa-pane h3 { margin: 0; padding: 16px 18px 10px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  .qa-pane h3 { margin: 0; padding: 16px 18px 10px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  #guessBtnWrap { padding: 0 14px 10px; }
+  #readyGuessBtn { background: linear-gradient(90deg, #c96aff, #ff6ac9); }
+  .guess-banner {
+    display: none; margin: 0 14px 10px; padding: 8px 10px; border-radius: 8px; font-size: 12px;
+    background: rgba(201,106,255,.15); border: 1px solid #c96aff; color: #e3b6ff;
+  }
+  .guess-banner.active { display: block; }
   #qaList { flex: 1; overflow-y: auto; padding: 0 14px; display: flex; flex-direction: column; gap: 10px; }
   .qbubble {
     background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
@@ -169,10 +200,58 @@
     background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; color: white;
     border-radius: 10px; padding: 0 16px; font-weight: 700; cursor: pointer;
   }
+  #qaForm button:disabled, #qaInput:disabled, #readyGuessBtn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ---------- Setup screen ---------- */
+  #setupScreen .board-pane { display: flex; flex-direction: column; }
+  #setupFooter {
+    padding: 14px 20px; border-top: 1px solid var(--border); background: var(--panel);
+    display: flex; justify-content: flex-end; gap: 10px;
+  }
+  #setupFooter .btn { width: auto; }
+  #setupFooter .waiting-msg { color: var(--muted); font-size: 13px; align-self: center; }
+
+  /* ---------- Secret screen ---------- */
+  #secretScreen .secret-inner { flex: 1; padding: 24px 28px; overflow-y: auto; }
+  #secretScreen h2 { margin: 0 0 4px; }
+  #secretScreen p.sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+  #secretFooter {
+    padding: 14px 20px; border-top: 1px solid var(--border); background: var(--panel);
+    display: flex; justify-content: flex-end; align-items: center; gap: 14px;
+  }
+  #secretFooter .btn { width: auto; }
+  #secretStatus { color: var(--muted); font-size: 13px; }
+
+  /* ---------- Game over overlay ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+    flex-direction: column; overflow: hidden; text-align: center;
+  }
+  .overlay.show { display: flex; }
+  .overlay.win { background: radial-gradient(circle at 50% 30%, #1c4a33 0%, #0e1a15 80%); }
+  .overlay.lose { background: radial-gradient(circle at 50% 30%, #4a1c1c 0%, #1a0e0e 80%); }
+  .overlay-text {
+    font-size: clamp(48px, 12vw, 110px); font-weight: 900; letter-spacing: -2px; z-index: 2;
+    text-shadow: 0 0 30px rgba(0,0,0,.5);
+  }
+  .overlay.win .overlay-text { color: var(--yes); }
+  .overlay.lose .overlay-text { color: var(--no); }
+  .overlay-sub { font-size: 15px; color: var(--muted); margin-top: 6px; z-index: 2; }
+  .overlay .btn { width: auto; margin-top: 26px; z-index: 2; }
+
+  .penguin-track { position: absolute; bottom: 8%; left: 0; width: 100%; height: 90px; overflow: hidden; pointer-events: none; }
+  .penguin { position: absolute; bottom: 0; font-size: 62px; animation: walk-across 3.5s linear forwards; }
+  .penguin span { display: inline-block; animation: waddle-bob .28s ease-in-out infinite alternate; }
+  @keyframes walk-across { from { left: -70px; } to { left: 100%; } }
+  @keyframes waddle-bob { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+
+  .tears-wrap { position: absolute; inset: 0; pointer-events: none; }
+  .tear { position: absolute; top: -10%; font-size: 40px; opacity: 0; animation: fall-down 2.2s ease-in infinite; }
+  @keyframes fall-down { 0% { top: -10%; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
 
   @media (max-width: 720px) {
     main { flex-direction: column; }
-    #qa-pane { width: auto; border-left: none; border-top: 1px solid var(--border); max-height: 42vh; }
+    .qa-pane { width: auto; border-left: none; border-top: 1px solid var(--border); max-height: 42vh; }
   }
 </style>
 </head>
@@ -207,27 +286,72 @@
     </div>
   </div>
 
-  <!-- GAME -->
-  <div id="game">
-    <header>
-      <div class="brand">🔥 Friendly <span>Fire</span></div>
-      <div id="roomCodeDisplay">Room <b id="roomCodeText"></b></div>
+  <!-- SHARED HEADER (all non-landing screens) -->
+  <header id="mainHeader" style="display:none">
+    <div class="brand">🔥 Friendly <span>Fire</span></div>
+    <div id="roomCodeDisplay">Room <b id="roomCodeText"></b></div>
+    <div class="header-right">
+      <div id="turnPill"><span id="turnText"></span></div>
       <div id="statusPill"><span id="statusDot"></span><span id="statusText">Connecting…</span></div>
-    </header>
+    </div>
+  </header>
+
+  <!-- SETUP SCREEN -->
+  <div id="setupScreen" class="screen">
     <main>
-      <div id="board-pane">
-        <div id="board-toolbar">
-          <h3>Photo Board — click a card to flip it down</h3>
-          <div>
-            <button class="btn btn-small btn-primary" id="addPhotoBtn">+ Add Photos</button>
+      <div class="board-pane">
+        <div class="board-toolbar">
+          <h3 id="setupTitle">Photo Board</h3>
+          <div class="toolbar-actions" id="hostToolbar">
+            <button class="btn btn-small btn-primary" id="addPhotoBtn">+ Upload Photo</button>
             <input type="file" id="fileInput" accept="image/*" multiple>
+            <div class="gen-row">
+              <input type="text" id="genNameInput" placeholder="Character name" maxlength="24">
+              <button class="btn btn-small btn-secondary" id="genBtn">🎲 Generate</button>
+            </div>
           </div>
         </div>
-        <div id="boardGrid"></div>
-        <div id="emptyBoard">No photos yet — click "+ Add Photos" to build the board.</div>
+        <p class="hint-text" id="setupHint"></p>
+        <div class="board-grid" id="setupGrid"></div>
+        <div class="empty-note" id="setupEmpty">No photos yet.</div>
       </div>
-      <div id="qa-pane">
+    </main>
+    <div id="setupFooter">
+      <span class="waiting-msg" id="setupFooterMsg"></span>
+      <button class="btn btn-primary" id="startGameBtn" style="display:none">Start Game →</button>
+      <button class="btn btn-primary" id="acceptBtn" style="display:none">Accept &amp; Continue</button>
+    </div>
+  </div>
+
+  <!-- SECRET SELECT SCREEN -->
+  <div id="secretScreen" class="screen">
+    <div class="secret-inner">
+      <h2>Choose your secret character</h2>
+      <p class="sub">Pick the photo the other player has to guess. They won't see which one you picked.</p>
+      <div class="board-grid" id="secretGrid"></div>
+    </div>
+    <div id="secretFooter">
+      <span id="secretStatus"></span>
+      <button class="btn btn-primary" id="confirmSecretBtn" disabled>Confirm Selection</button>
+    </div>
+  </div>
+
+  <!-- PLAYING SCREEN -->
+  <div id="game" class="screen">
+    <main>
+      <div class="board-pane">
+        <div class="board-toolbar">
+          <h3>Photo Board — click a card to flip it down</h3>
+        </div>
+        <div class="guess-banner" id="guessBanner">🎯 Guess mode — click the photo you think is their secret character. Click "Ready to Guess" again to cancel.</div>
+        <div class="board-grid" id="boardGrid"></div>
+        <div class="empty-note" id="emptyBoard" style="display:none">No photos.</div>
+      </div>
+      <div class="qa-pane">
         <h3>Questions</h3>
+        <div id="guessBtnWrap">
+          <button class="btn btn-primary" id="readyGuessBtn">🤔 Ready to Guess</button>
+        </div>
         <div id="qaList"></div>
         <form id="qaForm">
           <input type="text" id="qaInput" placeholder="Ask a question…" autocomplete="off">
@@ -235,6 +359,16 @@
         </form>
       </div>
     </main>
+
+    <div class="overlay" id="gameOverOverlay">
+      <div class="overlay-text" id="overlayText"></div>
+      <div class="overlay-sub" id="overlaySub"></div>
+      <div class="penguin-track" id="penguinTrack" style="display:none">
+        <div class="penguin"><span>🐧</span></div>
+      </div>
+      <div class="tears-wrap" id="tearsWrap" style="display:none"></div>
+      <button class="btn btn-secondary" id="newGameBtn">🔄 New Game</button>
+    </div>
   </div>
 
 </div>
@@ -249,8 +383,22 @@
   let conn = null;
   let myRole = null; // 'host' | 'joiner'
   let roomCode = null;
-  let photos = [];   // {id, name, dataUrl, flipped}
-  let questions = []; // {id, text, mine, answer}
+  let photos = [];    // {id, name, dataUrl, flipped}
+  let questions = [];  // {id, text, mine, answer}
+
+  // game flow state
+  let boardStarted = false;      // host clicked Start Game
+  let awaitingAccept = false;    // host: waiting on joiner's accept
+  let mySecretId = null;
+  let secretConfirmed = false;
+  let opponentSecretReady = false;
+  let currentTurn = null;        // 'host' | 'joiner'
+  let pendingQuestion = null;    // {id, text} addressed to currentTurn holder
+  let guessMode = false;
+  let awaitingGuessResult = false;
+  let gameOver = null;           // {won: bool}
+
+  function otherRole() { return myRole === 'host' ? 'joiner' : 'host'; }
 
   function randomCode() {
     let s = '';
@@ -261,6 +409,9 @@
     return 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
   function setLandingStatus(msg) { $('landingStatus').textContent = msg || ''; }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
 
   // ---------- Hosting ----------
   $('hostBtn').addEventListener('click', () => {
@@ -339,20 +490,25 @@
 
   // ---------- Shared connection wiring ----------
   function wireConnection() {
-    conn.on('open', enterGame);
-    if (conn.open) enterGame();
+    conn.on('open', enterSetup);
+    if (conn.open) enterSetup();
     conn.on('data', handleData);
     conn.on('close', () => setStatus(false, 'Player disconnected'));
     conn.on('error', () => setStatus(false, 'Connection error'));
   }
 
-  function enterGame() {
+  function enterSetup() {
     $('landing').style.display = 'none';
-    $('game').style.display = 'flex';
+    $('mainHeader').style.display = 'flex';
     $('roomCodeText').textContent = roomCode;
     setStatus(true, 'Connected');
-    renderBoard();
-    renderQuestions();
+    showScreen('setupScreen');
+    renderSetup();
+  }
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(el => el.classList.toggle('active', el.id === id));
+    $('turnPill').style.display = (id === 'game') ? 'flex' : 'none';
   }
 
   function setStatus(connected, text) {
@@ -366,22 +522,97 @@
 
   function handleData(msg) {
     if (!msg || !msg.type) return;
-    if (msg.type === 'photo') {
-      photos.push({ id: msg.id, name: msg.name, dataUrl: msg.dataUrl, flipped: false });
-      renderBoard();
-    } else if (msg.type === 'delete-photo') {
-      photos = photos.filter(p => p.id !== msg.id);
-      renderBoard();
-    } else if (msg.type === 'question') {
-      questions.push({ id: msg.id, text: msg.text, mine: false, answer: null });
-      renderQuestions();
-    } else if (msg.type === 'answer') {
-      const q = questions.find(q => q.id === msg.id);
-      if (q) { q.answer = msg.answer; renderQuestions(); }
+    switch (msg.type) {
+      case 'photo':
+        photos.push({ id: msg.id, name: msg.name, dataUrl: msg.dataUrl, flipped: false });
+        renderSetup();
+        break;
+      case 'delete-photo':
+        photos = photos.filter(p => p.id !== msg.id);
+        renderSetup();
+        break;
+      case 'start-game':
+        boardStarted = true;
+        renderSetup();
+        break;
+      case 'accepted':
+        awaitingAccept = false;
+        enterSecretSelect();
+        break;
+      case 'secret-ready':
+        opponentSecretReady = true;
+        maybeStartPlaying();
+        renderSecretStatus();
+        break;
+      case 'question':
+        questions.push({ id: msg.id, text: msg.text, mine: false, answer: null });
+        currentTurn = myRole;
+        pendingQuestion = { id: msg.id, text: msg.text };
+        renderPlaying();
+        break;
+      case 'answer': {
+        const q = questions.find(q => q.id === msg.id);
+        if (q) q.answer = msg.answer;
+        if (pendingQuestion && pendingQuestion.id === msg.id) pendingQuestion = null;
+        renderPlaying();
+        break;
+      }
+      case 'guess':
+        handleIncomingGuess(msg.photoId);
+        break;
+      case 'guess-result':
+        handleGuessResult(msg.photoId, msg.correct);
+        break;
     }
   }
 
-  // ---------- Photo board ----------
+  // ---------- Stick-figure generator ----------
+  function hashSeed(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      h ^= h >>> 16;
+      return (h >>> 0) / 4294967296;
+    };
+  }
+
+  function generateStickFigureDataUrl(name) {
+    const rand = hashSeed(name || 'anon' + Math.random());
+    const colors = ['#ff5e3a', '#3ac97e', '#4d9fff', '#ffcf4d', '#c96aff', '#ff6ac9', '#4dd9ff'];
+    const bg = ['#2d2138', '#243020', '#20242d', '#302020'][Math.floor(rand() * 4)];
+    const color = colors[Math.floor(rand() * colors.length)];
+    const skin = '#f1c27d';
+    const armAngle = 20 + rand() * 30;
+    const legAngle = 15 + rand() * 25;
+    const hasHat = rand() > 0.5;
+    const hasGlasses = rand() > 0.5;
+    const cx = 100, headY = 60, headR = 30;
+    const bodyTopY = headY + headR - 4, bodyBottomY = 165;
+    const armY = bodyTopY + 12;
+    const legBottomY = 225;
+    const armDX = Math.round(Math.sin(armAngle * Math.PI / 180) * 45);
+    const armDY = Math.round(Math.cos(armAngle * Math.PI / 180) * 45);
+    const legDX = Math.round(Math.sin(legAngle * Math.PI / 180) * 40);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240">'
+      + '<rect width="200" height="240" fill="' + bg + '"/>'
+      + '<circle cx="' + cx + '" cy="' + headY + '" r="' + headR + '" fill="' + skin + '" stroke="' + color + '" stroke-width="4"/>'
+      + (hasGlasses ? '<circle cx="' + (cx - 11) + '" cy="' + headY + '" r="7" fill="none" stroke="#1a1220" stroke-width="3"/><circle cx="' + (cx + 11) + '" cy="' + headY + '" r="7" fill="none" stroke="#1a1220" stroke-width="3"/><line x1="' + (cx - 4) + '" y1="' + headY + '" x2="' + (cx + 4) + '" y2="' + headY + '" stroke="#1a1220" stroke-width="3"/>' : '')
+      + (hasHat ? '<rect x="' + (cx - headR) + '" y="' + (headY - headR - 6) + '" width="' + (headR * 2) + '" height="8" fill="' + color + '"/><rect x="' + (cx - headR * 0.6) + '" y="' + (headY - headR - 26) + '" width="' + (headR * 1.2) + '" height="22" fill="' + color + '"/>' : '')
+      + '<line x1="' + cx + '" y1="' + bodyTopY + '" x2="' + cx + '" y2="' + bodyBottomY + '" stroke="' + color + '" stroke-width="6" stroke-linecap="round"/>'
+      + '<line x1="' + cx + '" y1="' + armY + '" x2="' + (cx - armDX) + '" y2="' + (armY + armDY) + '" stroke="' + color + '" stroke-width="6" stroke-linecap="round"/>'
+      + '<line x1="' + cx + '" y1="' + armY + '" x2="' + (cx + armDX) + '" y2="' + (armY + armDY) + '" stroke="' + color + '" stroke-width="6" stroke-linecap="round"/>'
+      + '<line x1="' + cx + '" y1="' + bodyBottomY + '" x2="' + (cx - legDX) + '" y2="' + legBottomY + '" stroke="' + color + '" stroke-width="6" stroke-linecap="round"/>'
+      + '<line x1="' + cx + '" y1="' + bodyBottomY + '" x2="' + (cx + legDX) + '" y2="' + legBottomY + '" stroke="' + color + '" stroke-width="6" stroke-linecap="round"/>'
+      + '</svg>';
+    return 'data:image/svg+xml;base64,' + btoa(svg);
+  }
+
+  // ---------- Setup phase (host builds board, joiner watches then accepts) ----------
   $('addPhotoBtn').addEventListener('click', () => $('fileInput').click());
   $('fileInput').addEventListener('change', async (e) => {
     const files = Array.from(e.target.files || []);
@@ -389,13 +620,28 @@
       const dataUrl = await resizeImage(file, 480);
       let name = file.name.replace(/\.[^/.]+$/, '');
       name = prompt('Name for this photo?', name) || name;
-      const id = uid();
-      photos.push({ id, name, dataUrl, flipped: false });
-      send({ type: 'photo', id, name, dataUrl });
+      addPhoto(name, dataUrl);
     }
-    renderBoard();
+    renderSetup();
     e.target.value = '';
   });
+
+  $('genBtn').addEventListener('click', () => {
+    const input = $('genNameInput');
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    const dataUrl = generateStickFigureDataUrl(name);
+    addPhoto(name, dataUrl);
+    input.value = '';
+    renderSetup();
+  });
+  $('genNameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('genBtn').click(); } });
+
+  function addPhoto(name, dataUrl) {
+    const id = uid();
+    photos.push({ id, name, dataUrl, flipped: false });
+    send({ type: 'photo', id, name, dataUrl });
+  }
 
   function resizeImage(file, maxDim) {
     return new Promise((resolve, reject) => {
@@ -419,13 +665,14 @@
     });
   }
 
-  function renderBoard() {
-    const grid = $('boardGrid');
+  function renderSetup() {
+    const isHost = myRole === 'host';
+    const grid = $('setupGrid');
     grid.innerHTML = '';
-    $('emptyBoard').style.display = photos.length ? 'none' : 'block';
+    $('setupEmpty').style.display = photos.length ? 'none' : 'block';
     photos.forEach(p => {
       const card = document.createElement('div');
-      card.className = 'card' + (p.flipped ? ' flipped' : '');
+      card.className = 'card';
       card.innerHTML = `
         <button class="remove-btn" title="Remove photo">✕</button>
         <div class="flipper">
@@ -435,31 +682,197 @@
           </div>
           <div class="face back"></div>
         </div>`;
-      card.addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-btn')) return;
-        p.flipped = !p.flipped;
-        card.classList.toggle('flipped', p.flipped);
-      });
-      card.querySelector('.remove-btn').addEventListener('click', () => {
-        photos = photos.filter(x => x.id !== p.id);
-        send({ type: 'delete-photo', id: p.id });
-        renderBoard();
-      });
+      if (isHost && !boardStarted) {
+        card.querySelector('.remove-btn').addEventListener('click', () => {
+          photos = photos.filter(x => x.id !== p.id);
+          send({ type: 'delete-photo', id: p.id });
+          renderSetup();
+        });
+      } else {
+        card.querySelector('.remove-btn').style.display = 'none';
+      }
+      grid.appendChild(card);
+    });
+
+    $('hostToolbar').style.display = isHost && !boardStarted ? 'flex' : 'none';
+    $('setupTitle').textContent = isHost ? 'Photo Board — build your roster' : 'Photo Board';
+
+    if (isHost) {
+      $('setupHint').textContent = boardStarted
+        ? 'Board locked — waiting for the other player to accept…'
+        : 'Add at least 2 photos, then start the game when ready.';
+      $('startGameBtn').style.display = boardStarted ? 'none' : 'inline-block';
+      $('startGameBtn').disabled = !(conn && conn.open) || photos.length < 2;
+      $('acceptBtn').style.display = 'none';
+      $('setupFooterMsg').textContent = boardStarted ? 'Waiting for the other player to accept the board…' : '';
+    } else {
+      $('setupHint').textContent = boardStarted
+        ? 'The host finished choosing photos — review the board below.'
+        : 'Waiting for the host to finish choosing photos…';
+      $('startGameBtn').style.display = 'none';
+      $('acceptBtn').style.display = boardStarted ? 'inline-block' : 'none';
+      $('setupFooterMsg').textContent = boardStarted ? '' : 'Waiting for host…';
+    }
+  }
+
+  $('startGameBtn').addEventListener('click', () => {
+    if (photos.length < 2 || !conn || !conn.open) return;
+    boardStarted = true;
+    awaitingAccept = true;
+    send({ type: 'start-game' });
+    renderSetup();
+  });
+
+  $('acceptBtn').addEventListener('click', () => {
+    send({ type: 'accepted' });
+    enterSecretSelect();
+  });
+
+  // ---------- Secret select phase ----------
+  function enterSecretSelect() {
+    showScreen('secretScreen');
+    renderSecretGrid();
+    renderSecretStatus();
+  }
+
+  function renderSecretGrid() {
+    const grid = $('secretGrid');
+    grid.innerHTML = '';
+    photos.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'card selectable' + (mySecretId === p.id ? ' selected' : '');
+      card.innerHTML = `
+        <div class="flipper">
+          <div class="face front">
+            <img src="${p.dataUrl}" alt="">
+            <div class="name">${escapeHtml(p.name)}</div>
+          </div>
+          <div class="face back"></div>
+        </div>`;
+      if (!secretConfirmed) {
+        card.addEventListener('click', () => {
+          mySecretId = p.id;
+          renderSecretGrid();
+          $('confirmSecretBtn').disabled = false;
+        });
+      }
       grid.appendChild(card);
     });
   }
 
-  // ---------- Questions ----------
+  function renderSecretStatus() {
+    if (!secretConfirmed) {
+      $('secretStatus').textContent = '';
+    } else if (opponentSecretReady) {
+      $('secretStatus').textContent = 'Starting…';
+    } else {
+      $('secretStatus').textContent = 'Waiting for the other player to choose…';
+    }
+  }
+
+  $('confirmSecretBtn').addEventListener('click', () => {
+    if (!mySecretId || secretConfirmed) return;
+    secretConfirmed = true;
+    $('confirmSecretBtn').disabled = true;
+    send({ type: 'secret-ready' });
+    renderSecretStatus();
+    maybeStartPlaying();
+  });
+
+  function maybeStartPlaying() {
+    if (secretConfirmed && opponentSecretReady) {
+      currentTurn = 'host';
+      pendingQuestion = null;
+      showScreen('game');
+      renderPlaying();
+    }
+  }
+
+  // ---------- Playing phase ----------
+  function isMyTurn() { return currentTurn === myRole; }
+  function iOweAnswer() { return isMyTurn() && !!pendingQuestion; }
+  function iCanAct() { return isMyTurn() && !pendingQuestion && !awaitingGuessResult && !gameOver; }
+
+  function renderPlaying() {
+    const grid = $('boardGrid');
+    grid.innerHTML = '';
+    $('emptyBoard').style.display = photos.length ? 'none' : 'block';
+    grid.classList.toggle('guessing', guessMode);
+
+    photos.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'card' + (p.flipped ? ' flipped' : '');
+      card.innerHTML = `
+        <div class="flipper">
+          <div class="face front">
+            <img src="${p.dataUrl}" alt="">
+            <div class="name">${escapeHtml(p.name)}</div>
+          </div>
+          <div class="face back"></div>
+        </div>`;
+      card.addEventListener('click', () => {
+        if (gameOver) return;
+        if (guessMode) {
+          if (!iCanAct() && !guessMode) return;
+          submitGuess(p.id);
+        } else {
+          p.flipped = !p.flipped;
+          card.classList.toggle('flipped', p.flipped);
+        }
+      });
+      grid.appendChild(card);
+    });
+
+    // turn pill
+    const pill = $('turnPill');
+    pill.classList.remove('my-turn', 'their-turn');
+    if (gameOver) {
+      $('turnText').textContent = 'Game over';
+    } else if (iOweAnswer()) {
+      pill.classList.add('my-turn');
+      $('turnText').textContent = 'Answer their question!';
+    } else if (isMyTurn()) {
+      pill.classList.add('my-turn');
+      $('turnText').textContent = 'Your turn';
+    } else {
+      pill.classList.add('their-turn');
+      $('turnText').textContent = "Their turn";
+    }
+
+    // controls
+    const canAct = iCanAct();
+    $('qaInput').disabled = !canAct;
+    $('qaForm').querySelector('button[type=submit]').disabled = !canAct;
+    $('readyGuessBtn').disabled = !canAct && !guessMode;
+    $('readyGuessBtn').textContent = guessMode ? '✖ Cancel Guess' : '🤔 Ready to Guess';
+    $('guessBanner').classList.toggle('active', guessMode);
+
+    renderQuestions();
+  }
+
+  $('readyGuessBtn').addEventListener('click', () => {
+    if (guessMode) {
+      guessMode = false;
+    } else {
+      if (!iCanAct()) return;
+      guessMode = true;
+    }
+    renderPlaying();
+  });
+
   $('qaForm').addEventListener('submit', (e) => {
     e.preventDefault();
+    if (!iCanAct()) return;
     const input = $('qaInput');
     const text = input.value.trim();
     if (!text) return;
     const id = uid();
     questions.push({ id, text, mine: true, answer: null });
     send({ type: 'question', id, text });
+    currentTurn = otherRole();
+    pendingQuestion = { id, text };
     input.value = '';
-    renderQuestions();
+    renderPlaying();
   });
 
   function answerQuestion(id, answer) {
@@ -467,7 +880,8 @@
     if (!q) return;
     q.answer = answer;
     send({ type: 'answer', id, answer });
-    renderQuestions();
+    if (pendingQuestion && pendingQuestion.id === id) pendingQuestion = null;
+    renderPlaying();
   }
 
   const ANSWER_LABELS = { yes: 'Yes', no: 'No', maybe: 'Maybe', notsure: 'Not Sure' };
@@ -502,9 +916,68 @@
     list.scrollTop = list.scrollHeight;
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // ---------- Guessing ----------
+  function submitGuess(photoId) {
+    guessMode = false;
+    awaitingGuessResult = true;
+    send({ type: 'guess', photoId });
+    renderPlaying();
   }
+
+  function handleIncomingGuess(photoId) {
+    const correct = photoId === mySecretId;
+    send({ type: 'guess-result', photoId, correct });
+    if (correct) {
+      endGame(false); // I lose, my secret was found
+    } else {
+      currentTurn = myRole; // it becomes my turn
+      pendingQuestion = null;
+      renderPlaying();
+    }
+  }
+
+  function handleGuessResult(photoId, correct) {
+    awaitingGuessResult = false;
+    if (correct) {
+      endGame(true); // I win
+    } else {
+      const p = photos.find(p => p.id === photoId);
+      if (p) p.flipped = true;
+      currentTurn = otherRole();
+      pendingQuestion = null;
+      renderPlaying();
+    }
+  }
+
+  function endGame(won) {
+    gameOver = { won };
+    guessMode = false;
+    awaitingGuessResult = false;
+    const overlay = $('gameOverOverlay');
+    overlay.classList.remove('win', 'lose');
+    overlay.classList.add(won ? 'win' : 'lose');
+    $('overlayText').textContent = won ? 'YOU WIN' : 'YOU LOSE';
+    $('overlaySub').textContent = won ? 'You guessed their character correctly!' : 'They guessed your character.';
+    $('penguinTrack').style.display = won ? 'block' : 'none';
+    const tearsWrap = $('tearsWrap');
+    tearsWrap.innerHTML = '';
+    tearsWrap.style.display = won ? 'none' : 'block';
+    if (!won) {
+      const positions = [20, 45, 65, 82];
+      positions.forEach((leftPct, i) => {
+        const t = document.createElement('div');
+        t.className = 'tear';
+        t.textContent = '💧';
+        t.style.left = leftPct + '%';
+        t.style.animationDelay = (i * 0.5) + 's';
+        tearsWrap.appendChild(t);
+      });
+    }
+    overlay.classList.add('show');
+    renderPlaying();
+  }
+
+  $('newGameBtn').addEventListener('click', () => location.reload());
 })();
 </script>
 </body>
