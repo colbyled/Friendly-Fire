@@ -70,6 +70,12 @@
   #joinFields { display: none; }
   .name-row { margin-bottom: 18px; text-align: left; }
   .name-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .segmented { display: flex; gap: 6px; }
+  .seg-btn {
+    flex: 1; padding: 9px 8px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .seg-btn.selected { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-color: transparent; color: white; }
 
   /* ---------- Shared chrome ---------- */
   header {
@@ -126,6 +132,15 @@
   .board-grid.guessing .card { cursor: crosshair; }
   .board-grid.guessing .card .face.front { outline: 2px dashed var(--accent); outline-offset: -2px; }
   .board-grid.readonly .card { cursor: default; }
+
+  .opponent-board { margin-bottom: 26px; }
+  .opponent-board h4 {
+    margin: 0 0 10px; font-size: 14px; font-weight: 700; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .opponent-board h4 .sub { font-size: 11px; color: var(--accent-2); font-weight: 600; text-transform: none; }
+  .opponent-board.eliminated h4 { opacity: .55; }
+  .opponent-board.eliminated h4 .sub { color: var(--muted); }
   .card {
     position: relative; aspect-ratio: 3/4; perspective: 800px; cursor: pointer;
   }
@@ -171,12 +186,13 @@
     display: flex; flex-direction: column; min-height: 0;
   }
   .qa-pane h3 { margin: 0; padding: 16px 18px 10px; font-size: 15px; color: var(--muted); font-weight: 600; }
-  .target-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 10px; }
+  .target-label { padding: 0 14px 8px; font-size: 12px; font-weight: 700; color: var(--accent-2); }
+  .target-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 12px; }
   .target-btn {
-    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 999px;
-    padding: 6px 12px; font-size: 12px; cursor: pointer;
+    border: 2px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 999px;
+    padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .12s;
   }
-  .target-btn.selected { background: var(--accent); border-color: var(--accent); color: white; }
+  .target-btn.selected { background: var(--accent); border-color: var(--accent-2); color: white; box-shadow: 0 0 0 3px rgba(255,158,44,.25); }
   .target-btn:disabled { opacity: .4; cursor: not-allowed; }
   #guessBtnWrap { padding: 0 14px 10px; }
   #readyGuessBtn { background: linear-gradient(90deg, #c96aff, #ff6ac9); }
@@ -282,7 +298,7 @@
   <!-- LANDING -->
   <div id="landing">
     <div class="logo">🔥 Friendly Fire</div>
-    <div class="tagline">A 3-player guess-who duel you can play from anywhere</div>
+    <div class="tagline">A guess-who duel you can play from anywhere</div>
 
     <div class="card-box">
       <div class="name-row">
@@ -291,7 +307,14 @@
       </div>
 
       <h2>Host a game</h2>
-      <p>Get a room code and share it with two other players.</p>
+      <p id="hostDesc">Get a room code and share it with two other players.</p>
+      <div class="name-row">
+        <span class="name-label">Number of players</span>
+        <div class="segmented" id="playerCountSeg">
+          <button type="button" class="seg-btn" data-n="2">2 players</button>
+          <button type="button" class="seg-btn selected" data-n="3">3 players</button>
+        </div>
+      </div>
       <button class="btn btn-primary" id="hostBtn">Host New Game</button>
 
       <div class="divider">OR</div>
@@ -363,21 +386,22 @@
     <main>
       <div class="board-pane">
         <div class="board-toolbar">
-          <h3>Photo Board — click a card to flip it down</h3>
+          <h3>Your tracking boards — flip a card to rule it out for that player</h3>
         </div>
         <div class="guess-banner" id="guessBanner"></div>
-        <div class="board-grid" id="boardGrid"></div>
+        <div id="boardsContainer"></div>
         <div class="empty-note" id="emptyBoard" style="display:none">No photos.</div>
       </div>
       <div class="qa-pane">
         <h3>Questions</h3>
+        <div class="target-label" id="targetLabel">🗨️ Step 1 — choose who to ask:</div>
         <div class="target-row" id="targetRow"></div>
         <div id="guessBtnWrap">
           <button class="btn btn-primary" id="readyGuessBtn">🤔 Ready to Guess</button>
         </div>
         <div id="qaList"></div>
         <form id="qaForm">
-          <input type="text" id="qaInput" placeholder="Ask a question…" autocomplete="off">
+          <input type="text" id="qaInput" placeholder="Select a player above first…" autocomplete="off">
           <button type="submit">Send</button>
         </form>
       </div>
@@ -407,10 +431,13 @@
   let myId = null;     // 0 = host, 1 / 2 = joiners
   let myName = '';
   let roomCode = null;
+  let maxPlayers = 3;   // 2 or 3 total players; set by host, learned by joiners via 'welcome'
   let conns = {};       // host: {1:conn, 2:conn}; joiner: {0:hostConn}
   let players = {};     // id -> {id, name}
-  let photos = [];      // {id, name, dataUrl, flipped}
+  let photos = [];      // {id, name, dataUrl}
   let questions = [];   // question or guess log entries
+
+  function allIds() { return Array.from({ length: maxPlayers }, (_, i) => i); }
 
   // game flow state
   let boardStarted = false;
@@ -422,7 +449,8 @@
   let currentAction = null;      // {type:'question'|'guess', id, actorId, targetId, ...} in-flight, blocks new actions
   let eliminated = {};           // id -> true
   let revealedSecrets = {};      // photoId -> playerId whose secret it was
-  let selectedTargetId = null;
+  let selectedTargetId = null;   // who to ask (question targeting only)
+  let flippedByTarget = {};      // targetId -> { photoId: true } — your own per-opponent ruled-out tracking board
   let guessMode = false;
   let gameOver = null;           // {winnerId}
 
@@ -466,6 +494,16 @@
   }
 
   // ---------- Hosting ----------
+  $('playerCountSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    maxPlayers = Number(btn.dataset.n);
+    $('playerCountSeg').querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('selected', b === btn));
+    $('hostDesc').textContent = maxPlayers === 2
+      ? 'Get a room code and share it with one other player.'
+      : 'Get a room code and share it with two other players.';
+  });
+
   $('hostBtn').addEventListener('click', () => {
     myName = $('nameInput').value.trim();
     if (!myName) { setLandingStatus('Enter your name first.'); $('nameInput').focus(); return; }
@@ -501,15 +539,18 @@
   }
 
   function handleIncomingConnection(c) {
+    // Reserve the slot synchronously (before 'open' fires) so two players joining
+    // at nearly the same instant can't both be handed the same player id.
     const usedIds = Object.keys(conns).map(Number);
-    if (usedIds.length >= 2) {
-      c.on('open', () => { c.send({ type: 'room-full' }); setTimeout(() => c.close(), 300); });
+    if (usedIds.length >= maxPlayers - 1) {
+      c.on('open', () => { c.send({ type: 'room-full', maxPlayers: maxPlayers }); setTimeout(() => c.close(), 300); });
       return;
     }
-    const assignedId = usedIds.includes(1) ? 2 : 1;
+    let assignedId = null;
+    for (let i = 1; i < maxPlayers; i++) { if (!usedIds.includes(i)) { assignedId = i; break; } }
+    conns[assignedId] = c;
     c.on('open', () => {
-      conns[assignedId] = c;
-      c.send({ type: 'welcome', id: assignedId, roomCode: roomCode });
+      c.send({ type: 'welcome', id: assignedId, roomCode: roomCode, maxPlayers: maxPlayers });
       wireRelayConn(c, assignedId);
       updateConnectionStatus();
       renderSetup();
@@ -560,13 +601,14 @@
       c.on('data', (msg) => {
         if (msg.type === 'welcome') {
           myId = msg.id;
+          maxPlayers = msg.maxPlayers || 3;
           players[myId] = { id: myId, name: myName };
           conns[0] = c;
           wireRelayConn(c, 0);
           sendToNetwork({ type: 'hello', name: myName });
           enterSetup();
         } else if (msg.type === 'room-full') {
-          setLandingStatus('That room already has 3 players.');
+          setLandingStatus(`That room already has ${msg.maxPlayers || 3} players.`);
           $('joinBtn').disabled = false;
           c.close();
         }
@@ -600,8 +642,9 @@
   function updateConnectionStatus() {
     if (myRole === 'host') {
       const n = Object.keys(conns).length;
-      if (n >= 2) setStatus(true, 'All players connected');
-      else setStatus(false, `Waiting for players… (${n}/2)`);
+      const needed = maxPlayers - 1;
+      if (n >= needed) setStatus(true, 'All players connected');
+      else setStatus(false, `Waiting for players… (${n}/${needed})`);
     } else {
       if (conns[0] && conns[0].open) setStatus(true, 'Connected');
       else setStatus(false, 'Connecting…');
@@ -630,7 +673,7 @@
         break;
       case 'sync-state':
         players = msg.players;
-        photos = msg.photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl, flipped: false }));
+        photos = msg.photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl }));
         boardStarted = msg.boardStarted;
         renderPlayersBar();
         renderSetup();
@@ -641,7 +684,7 @@
         break;
       case 'accept':
         acceptedIds.add(msg.from);
-        if (myRole === 'host' && acceptedIds.size >= 2) enterSecretSelect();
+        if (myRole === 'host' && acceptedIds.size >= maxPlayers - 1) enterSecretSelect();
         renderSetup();
         break;
       case 'secret-ready':
@@ -680,9 +723,9 @@
         currentAction = null;
         selectedTargetId = null;
         if (msg.correct) { eliminated[msg.targetId] = true; revealedSecrets[msg.photoId] = msg.targetId; }
-        if (msg.guesserId === myId) {
-          const p = photos.find(p => p.id === msg.photoId);
-          if (p && !msg.correct) p.flipped = true;
+        if (msg.guesserId === myId && !msg.correct) {
+          if (!flippedByTarget[msg.targetId]) flippedByTarget[msg.targetId] = {};
+          flippedByTarget[msg.targetId][msg.photoId] = true;
         }
         if (msg.winnerId !== null && msg.winnerId !== undefined) {
           applyGameOver(msg.winnerId);
@@ -768,7 +811,7 @@
 
   function addPhoto(name, dataUrl) {
     const id = uid();
-    photos.push({ id, name, dataUrl, flipped: false });
+    photos.push({ id, name, dataUrl });
     broadcastSyncState();
   }
 
@@ -838,19 +881,21 @@
 
     if (isHost) {
       const joinedCount = Object.keys(conns).length;
+      const neededJoiners = maxPlayers - 1;
+      const friendsWord = neededJoiners === 1 ? 'one other player' : 'two other players';
       if (boardStarted) {
-        $('setupHint').textContent = `Board locked — waiting for players to accept… (${acceptedIds.size}/2)`;
-      } else if (joinedCount < 2) {
-        $('setupHint').textContent = `Add your photos now — share room code ${roomCode} with two friends. (${joinedCount}/2 joined)`;
+        $('setupHint').textContent = `Board locked — waiting for players to accept… (${acceptedIds.size}/${neededJoiners})`;
+      } else if (joinedCount < neededJoiners) {
+        $('setupHint').textContent = `Add your photos now — share room code ${roomCode} with ${friendsWord}. (${joinedCount}/${neededJoiners} joined)`;
       } else {
         $('setupHint').textContent = 'Add at least 3 photos, then start the game when ready.';
       }
       $('startGameBtn').style.display = boardStarted ? 'none' : 'inline-block';
-      $('startGameBtn').disabled = joinedCount < 2 || photos.length < 3;
+      $('startGameBtn').disabled = joinedCount < neededJoiners || photos.length < 3;
       $('acceptBtn').style.display = 'none';
       $('setupFooterMsg').textContent = boardStarted
-        ? `Waiting for players to accept the board… (${acceptedIds.size}/2)`
-        : (joinedCount < 2 ? `Waiting for ${2 - joinedCount} more player(s)…` : '');
+        ? `Waiting for players to accept the board… (${acceptedIds.size}/${neededJoiners})`
+        : (joinedCount < neededJoiners ? `Waiting for ${neededJoiners - joinedCount} more player(s)…` : '');
     } else {
       $('setupHint').textContent = boardStarted
         ? 'The host finished choosing photos — review the board below.'
@@ -863,7 +908,7 @@
   }
 
   $('startGameBtn').addEventListener('click', () => {
-    if (photos.length < 3 || Object.keys(conns).length < 2) return;
+    if (photos.length < 3 || Object.keys(conns).length < maxPlayers - 1) return;
     boardStarted = true;
     sendToNetwork({ type: 'start-game' });
     renderSetup();
@@ -911,7 +956,7 @@
     if (!secretConfirmed) {
       $('secretStatus').textContent = '';
     } else {
-      $('secretStatus').textContent = `Waiting for others… (${secretsConfirmedIds.size}/3 ready)`;
+      $('secretStatus').textContent = `Waiting for others… (${secretsConfirmedIds.size}/${maxPlayers} ready)`;
     }
   }
 
@@ -926,7 +971,7 @@
   });
 
   function maybeStartPlaying() {
-    if (secretsConfirmedIds.size >= 3 && !gameOver) {
+    if (secretsConfirmedIds.size >= maxPlayers && !gameOver) {
       currentTurnId = 0;
       currentAction = null;
       selectedTargetId = null;
@@ -937,15 +982,15 @@
 
   // ---------- Playing phase ----------
   function nextActiveTurn(fromId) {
-    for (let i = 1; i <= 3; i++) {
-      const cand = (fromId + i) % 3;
+    for (let i = 1; i <= maxPlayers; i++) {
+      const cand = (fromId + i) % maxPlayers;
       if (!eliminated[cand]) return cand;
     }
     return fromId;
   }
 
   function computeWinnerIfAny() {
-    const activeIds = [0, 1, 2].filter(id => players[id] && !eliminated[id]);
+    const activeIds = allIds().filter(id => players[id] && !eliminated[id]);
     return activeIds.length === 1 ? activeIds[0] : null;
   }
 
@@ -958,7 +1003,7 @@
     if (!bar) return;
     bar.innerHTML = '';
     const onGameScreen = $('game').classList.contains('active');
-    [0, 1, 2].forEach(id => {
+    allIds().forEach(id => {
       const p = players[id];
       const pill = document.createElement('div');
       pill.className = 'player-pill';
@@ -979,14 +1024,19 @@
   function renderTargetRow() {
     const row = $('targetRow');
     row.innerHTML = '';
-    const activeOthers = [0, 1, 2].filter(id => id !== myId && players[id] && !eliminated[id]);
+    const activeOthers = allIds().filter(id => id !== myId && players[id] && !eliminated[id]);
+    const canPickTarget = iCanAct() && !guessMode;
+    $('targetLabel').style.display = activeOthers.length ? 'block' : 'none';
+    $('targetLabel').textContent = canPickTarget && !selectedTargetId
+      ? '🗨️ Step 1 — choose who to ask:'
+      : (selectedTargetId ? `🗨️ Asking ${nameOf(selectedTargetId)} — type your question below:` : '🗨️ Who to ask:');
     if (!activeOthers.length) return;
     activeOthers.forEach(id => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'target-btn' + (selectedTargetId === id ? ' selected' : '');
       btn.textContent = nameOf(id);
-      btn.disabled = !iCanAct();
+      btn.disabled = !canPickTarget;
       btn.addEventListener('click', () => {
         selectedTargetId = (selectedTargetId === id) ? null : id;
         renderPlaying();
@@ -995,36 +1045,55 @@
     });
   }
 
-  function renderPlaying() {
-    const grid = $('boardGrid');
-    grid.innerHTML = '';
+  function renderBoards() {
+    const container = $('boardsContainer');
+    container.innerHTML = '';
     $('emptyBoard').style.display = photos.length ? 'none' : 'block';
-    grid.classList.toggle('guessing', guessMode);
+    const others = allIds().filter(id => id !== myId && players[id]);
 
-    photos.forEach(p => {
-      const card = document.createElement('div');
-      card.className = 'card' + (p.flipped ? ' flipped' : '');
-      const revealedFor = revealedSecrets[p.id];
-      card.innerHTML = `
-        <div class="flipper">
-          <div class="face front">
-            <img src="${p.dataUrl}" alt="">
-            <div class="name">${escapeHtml(p.name)}${revealedFor !== undefined ? ' — ' + escapeHtml(nameOf(revealedFor)) : ''}</div>
-          </div>
-          <div class="face back"></div>
-        </div>`;
-      card.addEventListener('click', () => {
-        if (gameOver) return;
-        if (guessMode) {
-          if (!iCanAct() || !selectedTargetId) return;
-          submitGuess(p.id, selectedTargetId);
-        } else {
-          p.flipped = !p.flipped;
-          card.classList.toggle('flipped', p.flipped);
-        }
+    others.forEach(targetId => {
+      if (!flippedByTarget[targetId]) flippedByTarget[targetId] = {};
+      const isOut = !!eliminated[targetId];
+      const section = document.createElement('div');
+      section.className = 'opponent-board' + (isOut ? ' eliminated' : '');
+      const subLabel = isOut ? '<span class="sub">— out, secret revealed</span>'
+        : (guessMode ? '<span class="sub">— tap a card to guess</span>' : '');
+      section.innerHTML = `<h4>${escapeHtml(nameOf(targetId))}'s board ${subLabel}</h4>`;
+
+      const grid = document.createElement('div');
+      grid.className = 'board-grid' + (guessMode && !isOut ? ' guessing' : '');
+      photos.forEach(p => {
+        const isFlipped = !!flippedByTarget[targetId][p.id];
+        const card = document.createElement('div');
+        card.className = 'card' + (isFlipped ? ' flipped' : '');
+        const revealedFor = revealedSecrets[p.id];
+        card.innerHTML = `
+          <div class="flipper">
+            <div class="face front">
+              <img src="${p.dataUrl}" alt="">
+              <div class="name">${escapeHtml(p.name)}${revealedFor !== undefined ? ' — ' + escapeHtml(nameOf(revealedFor)) : ''}</div>
+            </div>
+            <div class="face back"></div>
+          </div>`;
+        card.addEventListener('click', () => {
+          if (gameOver || isOut) return;
+          if (guessMode) {
+            if (!iCanAct()) return;
+            submitGuess(p.id, targetId);
+          } else {
+            flippedByTarget[targetId][p.id] = !flippedByTarget[targetId][p.id];
+            card.classList.toggle('flipped', flippedByTarget[targetId][p.id]);
+          }
+        });
+        grid.appendChild(card);
       });
-      grid.appendChild(card);
+      section.appendChild(grid);
+      container.appendChild(section);
     });
+  }
+
+  function renderPlaying() {
+    renderBoards();
 
     // turn pill
     const pill = $('turnPill');
@@ -1050,14 +1119,15 @@
 
     // controls
     const canAct = iCanAct();
-    $('qaInput').disabled = !canAct || !selectedTargetId;
-    $('qaForm').querySelector('button[type=submit]').disabled = !canAct || !selectedTargetId;
-    $('readyGuessBtn').disabled = (!canAct && !guessMode) || (!guessMode && !selectedTargetId);
+    $('qaInput').disabled = !canAct || guessMode || !selectedTargetId;
+    $('qaInput').placeholder = selectedTargetId ? `Ask ${nameOf(selectedTargetId)}…` : 'Select a player above first…';
+    $('qaForm').querySelector('button[type=submit]').disabled = !canAct || guessMode || !selectedTargetId;
+    $('readyGuessBtn').disabled = !canAct && !guessMode;
     $('readyGuessBtn').textContent = guessMode ? '✖ Cancel Guess' : '🤔 Ready to Guess';
     const banner = $('guessBanner');
     banner.classList.toggle('active', guessMode);
-    if (guessMode && selectedTargetId) {
-      banner.textContent = `🎯 Guess mode — click the photo you think is ${nameOf(selectedTargetId)}'s secret character.`;
+    if (guessMode) {
+      banner.textContent = "🎯 Guess mode — tap a card on the player's board below whose secret you're guessing.";
     }
 
     renderTargetRow();
@@ -1069,15 +1139,16 @@
     if (guessMode) {
       guessMode = false;
     } else {
-      if (!iCanAct() || !selectedTargetId) return;
+      if (!iCanAct()) return;
       guessMode = true;
+      selectedTargetId = null;
     }
     renderPlaying();
   });
 
   $('qaForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!iCanAct() || !selectedTargetId) return;
+    if (!iCanAct() || guessMode || !selectedTargetId) return;
     const input = $('qaInput');
     const text = input.value.trim();
     if (!text) return;
