@@ -1026,10 +1026,11 @@
     row.innerHTML = '';
     const activeOthers = allIds().filter(id => id !== myId && players[id] && !eliminated[id]);
     const canPickTarget = iCanAct() && !guessMode;
+    const hasTarget = selectedTargetId !== null;
     $('targetLabel').style.display = activeOthers.length ? 'block' : 'none';
-    $('targetLabel').textContent = canPickTarget && !selectedTargetId
+    $('targetLabel').textContent = canPickTarget && !hasTarget
       ? '🗨️ Step 1 — choose who to ask:'
-      : (selectedTargetId ? `🗨️ Asking ${nameOf(selectedTargetId)} — type your question below:` : '🗨️ Who to ask:');
+      : (hasTarget ? `🗨️ Asking ${nameOf(selectedTargetId)} — type your question below:` : '🗨️ Who to ask:');
     if (!activeOthers.length) return;
     activeOthers.forEach(id => {
       const btn = document.createElement('button');
@@ -1119,9 +1120,10 @@
 
     // controls
     const canAct = iCanAct();
-    $('qaInput').disabled = !canAct || guessMode || !selectedTargetId;
-    $('qaInput').placeholder = selectedTargetId ? `Ask ${nameOf(selectedTargetId)}…` : 'Select a player above first…';
-    $('qaForm').querySelector('button[type=submit]').disabled = !canAct || guessMode || !selectedTargetId;
+    const hasTarget = selectedTargetId !== null;
+    $('qaInput').disabled = !canAct || guessMode || !hasTarget;
+    $('qaInput').placeholder = hasTarget ? `Ask ${nameOf(selectedTargetId)}…` : 'Select a player above first…';
+    $('qaForm').querySelector('button[type=submit]').disabled = !canAct || guessMode || !hasTarget;
     $('readyGuessBtn').disabled = !canAct && !guessMode;
     $('readyGuessBtn').textContent = guessMode ? '✖ Cancel Guess' : '🤔 Ready to Guess';
     const banner = $('guessBanner');
@@ -1148,7 +1150,7 @@
 
   $('qaForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!iCanAct() || guessMode || !selectedTargetId) return;
+    if (!iCanAct() || guessMode || selectedTargetId === null) return;
     const input = $('qaInput');
     const text = input.value.trim();
     if (!text) return;
