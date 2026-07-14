@@ -65,8 +65,11 @@
     text-transform: uppercase; text-align: center; margin-bottom: 10px;
   }
   input[type=text]:focus { outline: 2px solid var(--accent); }
+  input[type=text].input-plain { text-transform: none; letter-spacing: normal; text-align: left; }
   #landingStatus { margin-top: 16px; font-size: 13px; color: var(--muted); min-height: 18px; }
   #joinFields { display: none; }
+  .name-row { margin-bottom: 18px; text-align: left; }
+  .name-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 
   /* ---------- Shared chrome ---------- */
   header {
@@ -88,6 +91,19 @@
   #turnPill.their-turn { color: var(--muted); }
   #roomCodeDisplay { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
   #roomCodeDisplay b { color: var(--text); letter-spacing: 2px; font-size: 14px; }
+
+  #playersBar {
+    display: none; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border);
+    background: var(--panel-2); flex-wrap: wrap;
+  }
+  .player-pill {
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--border); font-size: 13px;
+  }
+  .player-pill.me { border-color: var(--accent-2); }
+  .player-pill.turn { border-color: var(--yes); box-shadow: 0 0 0 2px rgba(58,201,126,.25); }
+  .player-pill.out { opacity: .5; text-decoration: line-through; }
+  .player-pill .tag { font-size: 10px; color: var(--muted); text-decoration: none; }
 
   .screen { flex: 1; display: none; flex-direction: column; min-height: 0; }
   .screen.active { display: flex; }
@@ -155,10 +171,17 @@
     display: flex; flex-direction: column; min-height: 0;
   }
   .qa-pane h3 { margin: 0; padding: 16px 18px 10px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  .target-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 10px; }
+  .target-btn {
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 999px;
+    padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  .target-btn.selected { background: var(--accent); border-color: var(--accent); color: white; }
+  .target-btn:disabled { opacity: .4; cursor: not-allowed; }
   #guessBtnWrap { padding: 0 14px 10px; }
   #readyGuessBtn { background: linear-gradient(90deg, #c96aff, #ff6ac9); }
   .guess-banner {
-    display: none; margin: 0 14px 10px; padding: 8px 10px; border-radius: 8px; font-size: 12px;
+    display: none; margin: 0 0 14px; padding: 8px 10px; border-radius: 8px; font-size: 12px;
     background: rgba(201,106,255,.15); border: 1px solid #c96aff; color: #e3b6ff;
   }
   .guess-banner.active { display: block; }
@@ -259,11 +282,16 @@
   <!-- LANDING -->
   <div id="landing">
     <div class="logo">🔥 Friendly Fire</div>
-    <div class="tagline">A guess-who duel you can play from anywhere</div>
+    <div class="tagline">A 3-player guess-who duel you can play from anywhere</div>
 
     <div class="card-box">
+      <div class="name-row">
+        <label for="nameInput" class="name-label">Your name</label>
+        <input type="text" id="nameInput" class="input-plain" maxlength="16" placeholder="e.g. Sam">
+      </div>
+
       <h2>Host a game</h2>
-      <p>Get a room code and share it with the other player.</p>
+      <p>Get a room code and share it with two other players.</p>
       <button class="btn btn-primary" id="hostBtn">Host New Game</button>
 
       <div class="divider">OR</div>
@@ -288,6 +316,7 @@
       <div id="statusPill"><span id="statusDot"></span><span id="statusText">Connecting…</span></div>
     </div>
   </header>
+  <div id="playersBar"></div>
 
   <!-- SETUP SCREEN -->
   <div id="setupScreen" class="screen">
@@ -320,7 +349,7 @@
   <div id="secretScreen" class="screen">
     <div class="secret-inner">
       <h2>Choose your secret character</h2>
-      <p class="sub">Pick the photo the other player has to guess. They won't see which one you picked.</p>
+      <p class="sub">Pick the photo the other players have to guess. They won't see which one you picked.</p>
       <div class="board-grid" id="secretGrid"></div>
     </div>
     <div id="secretFooter">
@@ -336,12 +365,13 @@
         <div class="board-toolbar">
           <h3>Photo Board — click a card to flip it down</h3>
         </div>
-        <div class="guess-banner" id="guessBanner">🎯 Guess mode — click the photo you think is their secret character. Click "Ready to Guess" again to cancel.</div>
+        <div class="guess-banner" id="guessBanner"></div>
         <div class="board-grid" id="boardGrid"></div>
         <div class="empty-note" id="emptyBoard" style="display:none">No photos.</div>
       </div>
       <div class="qa-pane">
         <h3>Questions</h3>
+        <div class="target-row" id="targetRow"></div>
         <div id="guessBtnWrap">
           <button class="btn btn-primary" id="readyGuessBtn">🤔 Ready to Guess</button>
         </div>
@@ -368,30 +398,33 @@
 
 <script>
 (function () {
-  const PREFIX = 'ff-room-';
+  const PREFIX = 'ff3-room-';
   const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
   const $ = (id) => document.getElementById(id);
 
   let peer = null;
-  let conn = null;
-  let myRole = null; // 'host' | 'joiner'
+  let myRole = null;   // 'host' | 'joiner'
+  let myId = null;     // 0 = host, 1 / 2 = joiners
+  let myName = '';
   let roomCode = null;
-  let photos = [];    // {id, name, dataUrl, flipped}
-  let questions = [];  // {id, text, mine, answer}
+  let conns = {};       // host: {1:conn, 2:conn}; joiner: {0:hostConn}
+  let players = {};     // id -> {id, name}
+  let photos = [];      // {id, name, dataUrl, flipped}
+  let questions = [];   // question or guess log entries
 
   // game flow state
-  let boardStarted = false;      // host clicked Start Game
-  let awaitingAccept = false;    // host: waiting on joiner's accept
+  let boardStarted = false;
+  let acceptedIds = new Set();
   let mySecretId = null;
   let secretConfirmed = false;
-  let opponentSecretReady = false;
-  let currentTurn = null;        // 'host' | 'joiner'
-  let pendingQuestion = null;    // {id, text} addressed to currentTurn holder
+  let secretsConfirmedIds = new Set();
+  let currentTurnId = null;      // player id whose turn it is
+  let currentAction = null;      // {type:'question'|'guess', id, actorId, targetId, ...} in-flight, blocks new actions
+  let eliminated = {};           // id -> true
+  let revealedSecrets = {};      // photoId -> playerId whose secret it was
+  let selectedTargetId = null;
   let guessMode = false;
-  let awaitingGuessResult = false;
-  let gameOver = null;           // {won: bool}
-
-  function otherRole() { return myRole === 'host' ? 'joiner' : 'host'; }
+  let gameOver = null;           // {winnerId}
 
   function randomCode() {
     let s = '';
@@ -405,12 +438,41 @@
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+  function nameOf(id) { return players[id] ? players[id].name : '?'; }
+
+  // ---------- Networking ----------
+  function sendToNetwork(msg) {
+    msg.from = myId;
+    if (myRole === 'host') {
+      Object.values(conns).forEach(c => c.open && c.send(msg));
+    } else if (conns[0] && conns[0].open) {
+      conns[0].send(msg);
+    }
+  }
+
+  function wireRelayConn(conn, fromId) {
+    conn.on('data', (msg) => {
+      handleData(msg);
+      if (myRole === 'host') {
+        Object.keys(conns).forEach(idStr => {
+          const id = Number(idStr);
+          if (id !== fromId && conns[id] && conns[id].open) conns[id].send(msg);
+        });
+      }
+    });
+    conn.on('close', () => {
+      setStatus(false, (players[fromId] ? players[fromId].name : 'A player') + ' disconnected');
+    });
+  }
 
   // ---------- Hosting ----------
   $('hostBtn').addEventListener('click', () => {
+    myName = $('nameInput').value.trim();
+    if (!myName) { setLandingStatus('Enter your name first.'); $('nameInput').focus(); return; }
     $('joinFields').style.display = 'none';
     $('hostBtn').disabled = true;
     myRole = 'host';
+    myId = 0;
     attemptHost(0);
   });
 
@@ -422,10 +484,8 @@
     p.on('open', () => {
       peer = p;
       roomCode = code;
-      peer.on('connection', (c) => {
-        conn = c;
-        wireConnection();
-      });
+      players[0] = { id: 0, name: myName };
+      peer.on('connection', (c) => handleIncomingConnection(c));
       wireSignalingRecovery(peer);
       enterSetup();
     });
@@ -438,6 +498,23 @@
         $('hostBtn').disabled = false;
       }
     });
+  }
+
+  function handleIncomingConnection(c) {
+    const usedIds = Object.keys(conns).map(Number);
+    if (usedIds.length >= 2) {
+      c.on('open', () => { c.send({ type: 'room-full' }); setTimeout(() => c.close(), 300); });
+      return;
+    }
+    const assignedId = usedIds.includes(1) ? 2 : 1;
+    c.on('open', () => {
+      conns[assignedId] = c;
+      c.send({ type: 'welcome', id: assignedId, roomCode: roomCode });
+      wireRelayConn(c, assignedId);
+      updateConnectionStatus();
+      renderSetup();
+    });
+    c.on('error', () => {});
   }
 
   // PeerJS can silently lose its connection to the signaling server (laptop sleep,
@@ -462,6 +539,8 @@
 
   // ---------- Joining ----------
   $('joinBtn').addEventListener('click', () => {
+    myName = $('nameInput').value.trim();
+    if (!myName) { setLandingStatus('Enter your name first.'); $('nameInput').focus(); return; }
     if ($('joinFields').style.display !== 'block') {
       $('joinFields').style.display = 'block';
       $('joinCodeInput').focus();
@@ -477,12 +556,26 @@
     p.on('open', () => {
       peer = p;
       wireSignalingRecovery(peer);
-      conn = peer.connect(PREFIX + code, { reliable: true });
-      conn.on('open', () => wireConnection());
-      conn.on('error', () => {
+      const c = peer.connect(PREFIX + code, { reliable: true });
+      c.on('data', (msg) => {
+        if (msg.type === 'welcome') {
+          myId = msg.id;
+          players[myId] = { id: myId, name: myName };
+          conns[0] = c;
+          wireRelayConn(c, 0);
+          sendToNetwork({ type: 'hello', name: myName });
+          enterSetup();
+        } else if (msg.type === 'room-full') {
+          setLandingStatus('That room already has 3 players.');
+          $('joinBtn').disabled = false;
+          c.close();
+        }
+      });
+      c.on('error', () => {
         setLandingStatus('Could not find that room. Check the code and try again.');
         $('joinBtn').disabled = false;
       });
+      c.on('close', () => setStatus(false, 'Disconnected from host'));
     });
     p.on('error', (err) => {
       setLandingStatus('Connection error: ' + err.type);
@@ -494,28 +587,10 @@
     if (e.key === 'Enter') $('joinBtn').click();
   });
 
-  // ---------- Shared connection wiring ----------
-  function wireConnection() {
-    conn.on('open', onConnOpen);
-    if (conn.open) onConnOpen();
-    conn.on('data', handleData);
-    conn.on('close', () => setStatus(false, 'Player disconnected'));
-    conn.on('error', () => setStatus(false, 'Connection error'));
-  }
-
-  function onConnOpen() {
-    if (myRole === 'joiner') {
-      enterSetup();
-    } else {
-      updateConnectionStatus();
-      send({ type: 'sync-photos', photos: photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl })) });
-      renderSetup();
-    }
-  }
-
   function enterSetup() {
     $('landing').style.display = 'none';
     $('mainHeader').style.display = 'flex';
+    $('playersBar').style.display = 'flex';
     $('roomCodeText').textContent = roomCode;
     updateConnectionStatus();
     showScreen('setupScreen');
@@ -523,8 +598,14 @@
   }
 
   function updateConnectionStatus() {
-    if (conn && conn.open) setStatus(true, 'Connected');
-    else setStatus(false, myRole === 'host' ? 'Waiting for player to join…' : 'Connecting…');
+    if (myRole === 'host') {
+      const n = Object.keys(conns).length;
+      if (n >= 2) setStatus(true, 'All players connected');
+      else setStatus(false, `Waiting for players… (${n}/2)`);
+    } else {
+      if (conns[0] && conns[0].open) setStatus(true, 'Connected');
+      else setStatus(false, 'Connecting…');
+    }
   }
 
   function showScreen(id) {
@@ -537,57 +618,80 @@
     $('statusText').textContent = text;
   }
 
-  function send(obj) {
-    if (conn && conn.open) conn.send(obj);
-  }
-
+  // ---------- Incoming message handling (from relay) ----------
   function handleData(msg) {
     if (!msg || !msg.type) return;
     switch (msg.type) {
-      case 'photo':
-        photos.push({ id: msg.id, name: msg.name, dataUrl: msg.dataUrl, flipped: false });
+      case 'hello':
+        players[msg.from] = { id: msg.from, name: msg.name };
+        if (myRole === 'host') broadcastSyncState();
+        renderPlayersBar();
         renderSetup();
         break;
-      case 'sync-photos':
+      case 'sync-state':
+        players = msg.players;
         photos = msg.photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl, flipped: false }));
-        renderSetup();
-        break;
-      case 'delete-photo':
-        photos = photos.filter(p => p.id !== msg.id);
+        boardStarted = msg.boardStarted;
+        renderPlayersBar();
         renderSetup();
         break;
       case 'start-game':
         boardStarted = true;
         renderSetup();
         break;
-      case 'accepted':
-        awaitingAccept = false;
-        enterSecretSelect();
+      case 'accept':
+        acceptedIds.add(msg.from);
+        if (myRole === 'host' && acceptedIds.size >= 2) enterSecretSelect();
+        renderSetup();
         break;
       case 'secret-ready':
-        opponentSecretReady = true;
-        maybeStartPlaying();
+        secretsConfirmedIds.add(msg.from);
         renderSecretStatus();
+        maybeStartPlaying();
         break;
       case 'question':
-        questions.push({ id: msg.id, text: msg.text, mine: false, answer: null });
-        currentTurn = myRole;
-        pendingQuestion = { id: msg.id, text: msg.text };
+        questions.push({ id: msg.id, askerId: msg.askerId, targetId: msg.targetId, text: msg.text, answer: null });
+        currentAction = { type: 'question', id: msg.id, actorId: msg.askerId, targetId: msg.targetId, text: msg.text };
         renderPlaying();
         break;
       case 'answer': {
-        const q = questions.find(q => q.id === msg.id);
+        const q = questions.find(q => q.kind !== 'guess' && q.id === msg.id);
         if (q) q.answer = msg.answer;
-        if (pendingQuestion && pendingQuestion.id === msg.id) pendingQuestion = null;
+        currentAction = null;
+        currentTurnId = msg.nextTurn;
+        selectedTargetId = null;
         renderPlaying();
         break;
       }
-      case 'guess':
-        handleIncomingGuess(msg.photoId);
+      case 'guess': {
+        questions.push({ kind: 'guess', id: msg.id, guesserId: msg.guesserId, targetId: msg.targetId, photoId: msg.photoId, correct: null });
+        currentAction = { type: 'guess', id: msg.id, actorId: msg.guesserId, targetId: msg.targetId, photoId: msg.photoId };
+        if (msg.targetId === myId) {
+          const correct = msg.photoId === mySecretId;
+          respondToGuess(msg.id, msg.guesserId, msg.targetId, msg.photoId, correct);
+        } else {
+          renderPlaying();
+        }
         break;
-      case 'guess-result':
-        handleGuessResult(msg.photoId, msg.correct);
+      }
+      case 'guess-result': {
+        const g = questions.find(q => q.kind === 'guess' && q.id === msg.id);
+        if (g) g.correct = msg.correct;
+        currentAction = null;
+        selectedTargetId = null;
+        if (msg.correct) { eliminated[msg.targetId] = true; revealedSecrets[msg.photoId] = msg.targetId; }
+        if (msg.guesserId === myId) {
+          const p = photos.find(p => p.id === msg.photoId);
+          if (p && !msg.correct) p.flipped = true;
+        }
+        if (msg.winnerId !== null && msg.winnerId !== undefined) {
+          applyGameOver(msg.winnerId);
+        } else {
+          currentTurnId = msg.nextTurn;
+          renderPlaying();
+        }
         break;
+      }
     }
   }
 
@@ -637,7 +741,7 @@
     return 'data:image/svg+xml;base64,' + btoa(svg);
   }
 
-  // ---------- Setup phase (host builds board, joiner watches then accepts) ----------
+  // ---------- Setup phase (host builds board, joiners watch then accept) ----------
   $('addPhotoBtn').addEventListener('click', () => $('fileInput').click());
   $('fileInput').addEventListener('change', async (e) => {
     const files = Array.from(e.target.files || []);
@@ -665,7 +769,17 @@
   function addPhoto(name, dataUrl) {
     const id = uid();
     photos.push({ id, name, dataUrl, flipped: false });
-    send({ type: 'photo', id, name, dataUrl });
+    broadcastSyncState();
+  }
+
+  function broadcastSyncState() {
+    if (myRole !== 'host') return;
+    sendToNetwork({
+      type: 'sync-state',
+      players: players,
+      photos: photos.map(p => ({ id: p.id, name: p.name, dataUrl: p.dataUrl })),
+      boardStarted: boardStarted
+    });
   }
 
   function resizeImage(file, maxDim) {
@@ -710,7 +824,7 @@
       if (isHost && !boardStarted) {
         card.querySelector('.remove-btn').addEventListener('click', () => {
           photos = photos.filter(x => x.id !== p.id);
-          send({ type: 'delete-photo', id: p.id });
+          broadcastSyncState();
           renderSetup();
         });
       } else {
@@ -722,20 +836,21 @@
     $('hostToolbar').style.display = isHost && !boardStarted ? 'flex' : 'none';
     $('setupTitle').textContent = isHost ? 'Photo Board — build your roster' : 'Photo Board';
 
-    const connected = !!(conn && conn.open);
     if (isHost) {
+      const joinedCount = Object.keys(conns).length;
       if (boardStarted) {
-        $('setupHint').textContent = 'Board locked — waiting for the other player to accept…';
-      } else if (!connected) {
-        $('setupHint').textContent = 'Add your photos now — share the room code above whenever you\'re ready for the other player to join.';
+        $('setupHint').textContent = `Board locked — waiting for players to accept… (${acceptedIds.size}/2)`;
+      } else if (joinedCount < 2) {
+        $('setupHint').textContent = `Add your photos now — share room code ${roomCode} with two friends. (${joinedCount}/2 joined)`;
       } else {
-        $('setupHint').textContent = 'Add at least 2 photos, then start the game when ready.';
+        $('setupHint').textContent = 'Add at least 3 photos, then start the game when ready.';
       }
       $('startGameBtn').style.display = boardStarted ? 'none' : 'inline-block';
-      $('startGameBtn').disabled = !connected || photos.length < 2;
+      $('startGameBtn').disabled = joinedCount < 2 || photos.length < 3;
       $('acceptBtn').style.display = 'none';
-      $('setupFooterMsg').textContent = boardStarted ? 'Waiting for the other player to accept the board…'
-        : (!connected ? 'Waiting for the other player to join…' : '');
+      $('setupFooterMsg').textContent = boardStarted
+        ? `Waiting for players to accept the board… (${acceptedIds.size}/2)`
+        : (joinedCount < 2 ? `Waiting for ${2 - joinedCount} more player(s)…` : '');
     } else {
       $('setupHint').textContent = boardStarted
         ? 'The host finished choosing photos — review the board below.'
@@ -744,18 +859,19 @@
       $('acceptBtn').style.display = boardStarted ? 'inline-block' : 'none';
       $('setupFooterMsg').textContent = boardStarted ? '' : 'Waiting for host…';
     }
+    renderPlayersBar();
   }
 
   $('startGameBtn').addEventListener('click', () => {
-    if (photos.length < 2 || !conn || !conn.open) return;
+    if (photos.length < 3 || Object.keys(conns).length < 2) return;
     boardStarted = true;
-    awaitingAccept = true;
-    send({ type: 'start-game' });
+    sendToNetwork({ type: 'start-game' });
     renderSetup();
   });
 
   $('acceptBtn').addEventListener('click', () => {
-    send({ type: 'accepted' });
+    acceptedIds.add(myId);
+    sendToNetwork({ type: 'accept' });
     enterSecretSelect();
   });
 
@@ -794,35 +910,90 @@
   function renderSecretStatus() {
     if (!secretConfirmed) {
       $('secretStatus').textContent = '';
-    } else if (opponentSecretReady) {
-      $('secretStatus').textContent = 'Starting…';
     } else {
-      $('secretStatus').textContent = 'Waiting for the other player to choose…';
+      $('secretStatus').textContent = `Waiting for others… (${secretsConfirmedIds.size}/3 ready)`;
     }
   }
 
   $('confirmSecretBtn').addEventListener('click', () => {
     if (!mySecretId || secretConfirmed) return;
     secretConfirmed = true;
+    secretsConfirmedIds.add(myId);
     $('confirmSecretBtn').disabled = true;
-    send({ type: 'secret-ready' });
+    sendToNetwork({ type: 'secret-ready' });
     renderSecretStatus();
     maybeStartPlaying();
   });
 
   function maybeStartPlaying() {
-    if (secretConfirmed && opponentSecretReady) {
-      currentTurn = 'host';
-      pendingQuestion = null;
+    if (secretsConfirmedIds.size >= 3 && !gameOver) {
+      currentTurnId = 0;
+      currentAction = null;
+      selectedTargetId = null;
       showScreen('game');
       renderPlaying();
     }
   }
 
   // ---------- Playing phase ----------
-  function isMyTurn() { return currentTurn === myRole; }
-  function iOweAnswer() { return isMyTurn() && !!pendingQuestion; }
-  function iCanAct() { return isMyTurn() && !pendingQuestion && !awaitingGuessResult && !gameOver; }
+  function nextActiveTurn(fromId) {
+    for (let i = 1; i <= 3; i++) {
+      const cand = (fromId + i) % 3;
+      if (!eliminated[cand]) return cand;
+    }
+    return fromId;
+  }
+
+  function computeWinnerIfAny() {
+    const activeIds = [0, 1, 2].filter(id => players[id] && !eliminated[id]);
+    return activeIds.length === 1 ? activeIds[0] : null;
+  }
+
+  function isMyTurn() { return currentTurnId === myId; }
+  function iOweAnswer() { return !!currentAction && currentAction.type === 'question' && currentAction.targetId === myId; }
+  function iCanAct() { return !eliminated[myId] && isMyTurn() && !currentAction && !gameOver; }
+
+  function renderPlayersBar() {
+    const bar = $('playersBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    const onGameScreen = $('game').classList.contains('active');
+    [0, 1, 2].forEach(id => {
+      const p = players[id];
+      const pill = document.createElement('div');
+      pill.className = 'player-pill';
+      if (id === myId) pill.classList.add('me');
+      if (eliminated[id]) pill.classList.add('out');
+      if (onGameScreen && !gameOver && currentTurnId === id) pill.classList.add('turn');
+      if (p) {
+        pill.innerHTML = `<span>${escapeHtml(p.name)}</span>`
+          + (id === myId ? '<span class="tag">(you)</span>' : '')
+          + (eliminated[id] ? '<span class="tag">OUT</span>' : '');
+      } else {
+        pill.innerHTML = `<span class="tag">Waiting…</span>`;
+      }
+      bar.appendChild(pill);
+    });
+  }
+
+  function renderTargetRow() {
+    const row = $('targetRow');
+    row.innerHTML = '';
+    const activeOthers = [0, 1, 2].filter(id => id !== myId && players[id] && !eliminated[id]);
+    if (!activeOthers.length) return;
+    activeOthers.forEach(id => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'target-btn' + (selectedTargetId === id ? ' selected' : '');
+      btn.textContent = nameOf(id);
+      btn.disabled = !iCanAct();
+      btn.addEventListener('click', () => {
+        selectedTargetId = (selectedTargetId === id) ? null : id;
+        renderPlaying();
+      });
+      row.appendChild(btn);
+    });
+  }
 
   function renderPlaying() {
     const grid = $('boardGrid');
@@ -833,19 +1004,20 @@
     photos.forEach(p => {
       const card = document.createElement('div');
       card.className = 'card' + (p.flipped ? ' flipped' : '');
+      const revealedFor = revealedSecrets[p.id];
       card.innerHTML = `
         <div class="flipper">
           <div class="face front">
             <img src="${p.dataUrl}" alt="">
-            <div class="name">${escapeHtml(p.name)}</div>
+            <div class="name">${escapeHtml(p.name)}${revealedFor !== undefined ? ' — ' + escapeHtml(nameOf(revealedFor)) : ''}</div>
           </div>
           <div class="face back"></div>
         </div>`;
       card.addEventListener('click', () => {
         if (gameOver) return;
         if (guessMode) {
-          if (!iCanAct() && !guessMode) return;
-          submitGuess(p.id);
+          if (!iCanAct() || !selectedTargetId) return;
+          submitGuess(p.id, selectedTargetId);
         } else {
           p.flipped = !p.flipped;
           card.classList.toggle('flipped', p.flipped);
@@ -859,33 +1031,45 @@
     pill.classList.remove('my-turn', 'their-turn');
     if (gameOver) {
       $('turnText').textContent = 'Game over';
+    } else if (eliminated[myId]) {
+      pill.classList.add('their-turn');
+      $('turnText').textContent = "You're out — spectating";
     } else if (iOweAnswer()) {
       pill.classList.add('my-turn');
-      $('turnText').textContent = 'Answer their question!';
-    } else if (isMyTurn()) {
+      $('turnText').textContent = `Answer ${nameOf(currentAction.actorId)}'s question!`;
+    } else if (isMyTurn() && !currentAction) {
       pill.classList.add('my-turn');
       $('turnText').textContent = 'Your turn';
+    } else if (currentAction) {
+      pill.classList.add('their-turn');
+      $('turnText').textContent = `Waiting on ${nameOf(currentAction.targetId)}…`;
     } else {
       pill.classList.add('their-turn');
-      $('turnText').textContent = "Their turn";
+      $('turnText').textContent = `${nameOf(currentTurnId)}'s turn`;
     }
 
     // controls
     const canAct = iCanAct();
-    $('qaInput').disabled = !canAct;
-    $('qaForm').querySelector('button[type=submit]').disabled = !canAct;
-    $('readyGuessBtn').disabled = !canAct && !guessMode;
+    $('qaInput').disabled = !canAct || !selectedTargetId;
+    $('qaForm').querySelector('button[type=submit]').disabled = !canAct || !selectedTargetId;
+    $('readyGuessBtn').disabled = (!canAct && !guessMode) || (!guessMode && !selectedTargetId);
     $('readyGuessBtn').textContent = guessMode ? '✖ Cancel Guess' : '🤔 Ready to Guess';
-    $('guessBanner').classList.toggle('active', guessMode);
+    const banner = $('guessBanner');
+    banner.classList.toggle('active', guessMode);
+    if (guessMode && selectedTargetId) {
+      banner.textContent = `🎯 Guess mode — click the photo you think is ${nameOf(selectedTargetId)}'s secret character.`;
+    }
 
+    renderTargetRow();
     renderQuestions();
+    renderPlayersBar();
   }
 
   $('readyGuessBtn').addEventListener('click', () => {
     if (guessMode) {
       guessMode = false;
     } else {
-      if (!iCanAct()) return;
+      if (!iCanAct() || !selectedTargetId) return;
       guessMode = true;
     }
     renderPlaying();
@@ -893,25 +1077,32 @@
 
   $('qaForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!iCanAct()) return;
+    if (!iCanAct() || !selectedTargetId) return;
     const input = $('qaInput');
     const text = input.value.trim();
     if (!text) return;
-    const id = uid();
-    questions.push({ id, text, mine: true, answer: null });
-    send({ type: 'question', id, text });
-    currentTurn = otherRole();
-    pendingQuestion = { id, text };
+    askQuestion(text, selectedTargetId);
     input.value = '';
-    renderPlaying();
   });
 
+  function askQuestion(text, targetId) {
+    const id = uid();
+    questions.push({ id, askerId: myId, targetId, text, answer: null });
+    currentAction = { type: 'question', id, actorId: myId, targetId, text };
+    sendToNetwork({ type: 'question', id, askerId: myId, targetId, text });
+    selectedTargetId = null;
+    renderPlaying();
+  }
+
   function answerQuestion(id, answer) {
-    const q = questions.find(q => q.id === id);
+    const q = questions.find(q => q.kind !== 'guess' && q.id === id);
     if (!q) return;
     q.answer = answer;
-    send({ type: 'answer', id, answer });
-    if (pendingQuestion && pendingQuestion.id === id) pendingQuestion = null;
+    const nextTurn = nextActiveTurn(q.askerId);
+    currentAction = null;
+    currentTurnId = nextTurn;
+    selectedTargetId = null;
+    sendToNetwork({ type: 'answer', id, answer, nextTurn });
     renderPlaying();
   }
 
@@ -922,25 +1113,40 @@
     list.innerHTML = '';
     questions.forEach(q => {
       const div = document.createElement('div');
-      div.className = 'qbubble' + (q.mine ? ' mine' : '');
-      let inner = `<div class="who">${q.mine ? 'You asked' : 'They asked'}</div><div class="text">${escapeHtml(q.text)}</div>`;
-      if (q.answer) {
-        inner += `<div class="answer-badge ${q.answer}">${ANSWER_LABELS[q.answer]}</div>`;
-      } else if (q.mine) {
-        inner += `<div class="waiting">Waiting for answer…</div>`;
+      if (q.kind === 'guess') {
+        div.className = 'qbubble' + (q.guesserId === myId ? ' mine' : '');
+        const photo = photos.find(p => p.id === q.photoId);
+        const photoName = photo ? photo.name : '?';
+        let inner = `<div class="who">🎯 Guess</div><div class="text">${escapeHtml(q.guesserId === myId ? 'You' : nameOf(q.guesserId))} guessed ${escapeHtml(q.targetId === myId ? 'you' : nameOf(q.targetId))} ${q.targetId === myId ? 'are' : 'is'} "${escapeHtml(photoName)}"</div>`;
+        if (q.correct === null) {
+          inner += `<div class="waiting">Checking…</div>`;
+        } else if (q.correct) {
+          inner += `<div class="answer-badge yes">Correct — ${escapeHtml(nameOf(q.targetId))} is out!</div>`;
+        } else {
+          inner += `<div class="answer-badge no">Wrong guess</div>`;
+        }
+        div.innerHTML = inner;
       } else {
-        inner += `<div class="answers">
-          <button class="abtn yes" data-a="yes">Yes</button>
-          <button class="abtn no" data-a="no">No</button>
-          <button class="abtn maybe" data-a="maybe">Maybe</button>
-          <button class="abtn notsure" data-a="notsure">Not Sure</button>
-        </div>`;
-      }
-      div.innerHTML = inner;
-      if (!q.answer && !q.mine) {
-        div.querySelectorAll('.abtn').forEach(btn => {
-          btn.addEventListener('click', () => answerQuestion(q.id, btn.dataset.a));
-        });
+        div.className = 'qbubble' + (q.askerId === myId ? ' mine' : '');
+        let inner = `<div class="who">${q.askerId === myId ? 'You' : escapeHtml(nameOf(q.askerId))} asked ${q.targetId === myId ? 'you' : escapeHtml(nameOf(q.targetId))}</div><div class="text">${escapeHtml(q.text)}</div>`;
+        if (q.answer) {
+          inner += `<div class="answer-badge ${q.answer}">${ANSWER_LABELS[q.answer]}</div>`;
+        } else if (q.targetId === myId) {
+          inner += `<div class="answers">
+            <button class="abtn yes" data-a="yes">Yes</button>
+            <button class="abtn no" data-a="no">No</button>
+            <button class="abtn maybe" data-a="maybe">Maybe</button>
+            <button class="abtn notsure" data-a="notsure">Not Sure</button>
+          </div>`;
+        } else {
+          inner += `<div class="waiting">Waiting for answer…</div>`;
+        }
+        div.innerHTML = inner;
+        if (!q.answer && q.targetId === myId) {
+          div.querySelectorAll('.abtn').forEach(btn => {
+            btn.addEventListener('click', () => answerQuestion(q.id, btn.dataset.a));
+          });
+        }
       }
       list.appendChild(div);
     });
@@ -948,47 +1154,40 @@
   }
 
   // ---------- Guessing ----------
-  function submitGuess(photoId) {
+  function submitGuess(photoId, targetId) {
+    const id = uid();
     guessMode = false;
-    awaitingGuessResult = true;
-    send({ type: 'guess', photoId });
+    questions.push({ kind: 'guess', id, guesserId: myId, targetId, photoId, correct: null });
+    currentAction = { type: 'guess', id, actorId: myId, targetId, photoId };
+    sendToNetwork({ type: 'guess', id, guesserId: myId, targetId, photoId });
+    selectedTargetId = null;
     renderPlaying();
   }
 
-  function handleIncomingGuess(photoId) {
-    const correct = photoId === mySecretId;
-    send({ type: 'guess-result', photoId, correct });
-    if (correct) {
-      endGame(false); // I lose, my secret was found
-    } else {
-      currentTurn = myRole; // it becomes my turn
-      pendingQuestion = null;
-      renderPlaying();
-    }
+  function respondToGuess(id, guesserId, targetId, photoId, correct) {
+    const g = questions.find(q => q.kind === 'guess' && q.id === id);
+    if (g) g.correct = correct;
+    if (correct) { eliminated[targetId] = true; revealedSecrets[photoId] = targetId; }
+    const winnerId = computeWinnerIfAny();
+    const nextTurn = winnerId === null ? nextActiveTurn(guesserId) : null;
+    currentAction = null;
+    currentTurnId = nextTurn;
+    selectedTargetId = null;
+    sendToNetwork({ type: 'guess-result', id, guesserId, targetId, photoId, correct, nextTurn, winnerId: winnerId === null ? null : winnerId });
+    if (winnerId !== null) applyGameOver(winnerId);
+    else renderPlaying();
   }
 
-  function handleGuessResult(photoId, correct) {
-    awaitingGuessResult = false;
-    if (correct) {
-      endGame(true); // I win
-    } else {
-      const p = photos.find(p => p.id === photoId);
-      if (p) p.flipped = true;
-      currentTurn = otherRole();
-      pendingQuestion = null;
-      renderPlaying();
-    }
-  }
-
-  function endGame(won) {
-    gameOver = { won };
+  function applyGameOver(winnerId) {
+    gameOver = { winnerId };
     guessMode = false;
-    awaitingGuessResult = false;
+    currentAction = null;
+    const won = winnerId === myId;
     const overlay = $('gameOverOverlay');
     overlay.classList.remove('win', 'lose');
     overlay.classList.add(won ? 'win' : 'lose');
-    $('overlayText').textContent = won ? 'YOU WIN' : 'YOU LOSE';
-    $('overlaySub').textContent = won ? 'You guessed their character correctly!' : 'They guessed your character.';
+    $('overlayText').textContent = won ? 'YOU WIN' : 'GAME OVER';
+    $('overlaySub').textContent = won ? 'You were the last one standing!' : (nameOf(winnerId) + ' wins!');
     $('penguinTrack').style.display = won ? 'block' : 'none';
     const tearsWrap = $('tearsWrap');
     tearsWrap.innerHTML = '';
